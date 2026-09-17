@@ -2,9 +2,14 @@
 
 namespace App\Providers;
 
+use App\Models\Tenant;
+use App\Models\User;
+use App\Policies\TenantPolicy;
+use App\Policies\UserPolicy;
 use App\Tenancy\TenantContext;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -24,6 +29,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Gate::policy(Tenant::class, TenantPolicy::class);
+        Gate::policy(User::class, UserPolicy::class);
+        Gate::before(
+            fn (User $user): ?bool => $user->isSuperAdmin() ? true : null,
+        );
+
         RateLimiter::for('login', function (Request $request): Limit {
             $email = Str::transliterate(
                 Str::lower($request->string('email')->trim()->toString()),

@@ -2,11 +2,14 @@
 
 namespace Tests\Feature\Tenancy;
 
+use App\Enums\RoleName;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Tenancy\TenantResolver;
+use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 class TenantResolverTest extends TestCase
@@ -57,5 +60,21 @@ class TenantResolverTest extends TestCase
         $this->expectExceptionMessage('Tenant access denied.');
 
         app(TenantResolver::class)->resolve($user, $tenant->id);
+    }
+
+    public function test_super_admin_can_resolve_any_active_tenant_without_membership(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $superAdmin = User::factory()->create();
+        $assignmentTenant = Tenant::factory()->create();
+        $platformTenant = Tenant::factory()->create();
+
+        app(PermissionRegistrar::class)->setPermissionsTeamId($assignmentTenant->id);
+        $superAdmin->assignRole(RoleName::SuperAdmin->value);
+        app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+
+        $resolvedTenant = app(TenantResolver::class)->resolve($superAdmin, $platformTenant->id);
+
+        $this->assertTrue($resolvedTenant->is($platformTenant));
     }
 }

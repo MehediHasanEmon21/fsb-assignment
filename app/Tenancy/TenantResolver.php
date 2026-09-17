@@ -17,7 +17,9 @@ class TenantResolver
             throw new AuthorizationException('Tenant access denied.');
         }
 
-        $tenant = $user->accessibleTenants()->whereKey($tenantId)->first();
+        $tenant = $user->isSuperAdmin()
+            ? Tenant::query()->where('status', 'active')->whereKey($tenantId)->first()
+            : $user->accessibleTenants()->whereKey($tenantId)->first();
 
         if ($tenant === null) {
             throw new AuthorizationException('Tenant access denied.');
