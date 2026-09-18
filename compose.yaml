@@ -77,7 +77,13 @@ services:
       echo 'Waiting for Composer dependencies...';
       sleep 2;
       done;
-      php artisan queue:work redis --sleep=1 --tries=3 --timeout=90"
+      php artisan queue:work redis
+      --queue=notifications,default
+      --sleep=1
+      --tries=3
+      --backoff=10
+      --timeout=90
+      --max-time=3600"
     volumes:
       - .:/var/www/html
       - app_vendor:/var/www/html/vendor

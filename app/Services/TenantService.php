@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\RoleName;
+use App\Jobs\SendTenantAdminWelcomeEmail;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Tenancy\TenantContext;
@@ -16,8 +17,6 @@ use Spatie\Permission\PermissionRegistrar;
 
 class TenantService
 {
-    private const TEMPORARY_TENANT_ADMIN_PASSWORD = 'password';
-
     public function __construct(
         private readonly TenantContext $tenantContext,
         private readonly PermissionRegistrar $permissions,
@@ -39,7 +38,7 @@ class TenantService
                 $tenantAdmin = User::query()->create([
                     'name' => $attributes['name'],
                     'email' => $attributes['email'],
-                    'password' => Hash::make(self::TEMPORARY_TENANT_ADMIN_PASSWORD),
+                    'password' => Hash::make((string) config('tenancy.temporary_admin_password')),
                     'status' => 'active',
                 ]);
 
@@ -52,6 +51,7 @@ class TenantService
                 $this->permissions->setPermissionsTeamId($tenant->id);
                 $tenantAdmin->unsetRelation('roles');
                 $tenantAdmin->assignRole(RoleName::TenantAdmin->value);
+                SendTenantAdminWelcomeEmail::dispatch($tenant->id, $tenantAdmin->id);
 
                 return $tenant;
             });
