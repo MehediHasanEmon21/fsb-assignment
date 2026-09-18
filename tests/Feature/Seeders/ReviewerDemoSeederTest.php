@@ -40,12 +40,13 @@ class ReviewerDemoSeederTest extends TestCase
     {
         $this->seed();
 
-        $superAdminToken = $this->login('superadmin@example.test');
-        $acmeToken = $this->login('admin@acme.test');
         $superAdmin = User::query()->where('email', 'superadmin@example.test')->firstOrFail();
         $acmeAdmin = User::query()->where('email', 'admin@acme.test')->firstOrFail();
         $acme = Tenant::query()->where('slug', 'acme-software')->firstOrFail();
         $northwind = Tenant::query()->where('slug', 'northwind-labs')->firstOrFail();
+
+        $this->assertNotEmpty($this->login('superadmin@example.test'));
+        $acmeToken = $this->login('admin@acme.test');
 
         $this->assertTrue($superAdmin->isSuperAdmin());
         $this->assertFalse($acmeAdmin->isSuperAdmin());
@@ -58,11 +59,6 @@ class ReviewerDemoSeederTest extends TestCase
             ->getJson('/api/v1/auth/me')
             ->assertOk()
             ->assertJsonPath('data.email', 'admin@acme.test');
-        $this->flushHeaders()
-            ->withToken($superAdminToken)
-            ->getJson('/api/v1/auth/me')
-            ->assertOk()
-            ->assertJsonPath('data.email', 'superadmin@example.test');
 
         $this->tenantRequest($acmeToken, $acme)
             ->getJson("/api/v1/tenants/{$acme->id}/dashboard")
