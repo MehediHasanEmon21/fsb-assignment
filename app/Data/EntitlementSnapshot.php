@@ -2,16 +2,29 @@
 
 namespace App\Data;
 
-use App\Models\Subscription;
-use Illuminate\Support\Collection;
-
 final readonly class EntitlementSnapshot
 {
     /**
-     * @param  Collection<int, FeatureEntitlement>  $features
+     * @param  null|array<string, mixed>  $subscription
+     * @param  array<int, array<string, mixed>>  $features
      */
     public function __construct(
-        public ?Subscription $subscription,
-        public Collection $features,
+        public ?array $subscription,
+        public array $features,
     ) {}
+
+    /** @param array{subscription: null|array<string, mixed>, features: array<int, array<string, mixed>>} $data */
+    public static function fromArray(array $data): self
+    {
+        return new self($data['subscription'], $data['features']);
+    }
+
+    /** @return array{subscription: null|array<string, mixed>, features: array<int, array<string, mixed>>} */
+    public function toArray(): array
+    {
+        return [
+            'subscription' => $this->subscription,
+            'features' => $this->features,
+        ];
+    }
 }

@@ -20,6 +20,7 @@ class CustomerService
     public function __construct(
         private readonly TenantContext $tenantContext,
         private readonly EntitlementService $entitlements,
+        private readonly TenantCacheService $cache,
     ) {}
 
     /**
@@ -64,11 +65,14 @@ class CustomerService
             $this->synchronizeUsage($tenant);
             $this->entitlements->consume($tenant, self::FEATURE_KEY);
 
-            return Customer::query()->create([
+            $customer = Customer::query()->create([
                 'tenant_id' => $tenant->id,
                 ...$attributes,
                 'status' => $attributes['status'] ?? 'active',
             ]);
+            DB::afterCommit(fn () => $this->cache->invalidateDashboard($tenant->id));
+
+            return $customer;
         });
     }
 
@@ -86,6 +90,7 @@ class CustomerService
         $customer = $this->tenantCustomer($tenantId, $customerId);
         Gate::forUser($actor)->authorize('update', $customer);
         $customer->update($attributes);
+        $this->cache->invalidateDashboard($customer->tenant_id);
 
         return $customer->refresh();
     }
@@ -99,6 +104,7 @@ class CustomerService
             $tenant = Tenant::query()->whereKey($customer->tenant_id)->lockForUpdate()->firstOrFail();
             $customer->delete();
             $this->synchronizeUsage($tenant, false);
+            DB::afterCommit(fn () => $this->cache->invalidateDashboard($tenant->id));
         });
     }
 

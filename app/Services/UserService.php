@@ -17,6 +17,7 @@ class UserService
     public function __construct(
         private readonly TenantContext $tenantContext,
         private readonly EntitlementService $entitlements,
+        private readonly TenantCacheService $cache,
     ) {}
 
     /**
@@ -41,6 +42,7 @@ class UserService
             ]);
             $user->tenants()->attach($tenant, ['status' => 'active']);
             $user->assignRole(RoleName::User->value);
+            DB::afterCommit(fn () => $this->cache->invalidateDashboard($tenant->id));
 
             return $user;
         });

@@ -21,6 +21,7 @@ class TenantService
     public function __construct(
         private readonly TenantContext $tenantContext,
         private readonly PermissionRegistrar $permissions,
+        private readonly TenantCacheService $cache,
     ) {}
 
     /**
@@ -115,6 +116,7 @@ class TenantService
         }
 
         $tenant->update($attributes);
+        $this->cache->invalidateEntitlements($tenant->id);
 
         return $tenant->refresh();
     }

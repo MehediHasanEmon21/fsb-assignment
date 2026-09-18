@@ -18,7 +18,10 @@ use Illuminate\Support\Facades\Gate;
 
 class SubscriptionService
 {
-    public function __construct(private readonly TenantContext $tenantContext) {}
+    public function __construct(
+        private readonly TenantContext $tenantContext,
+        private readonly TenantCacheService $cache,
+    ) {}
 
     public function current(User $user, int $tenantId): ?Subscription
     {
@@ -79,6 +82,7 @@ class SubscriptionService
                 'ends_at' => BillingInterval::endingAtFor($plan->billing_interval, $now),
                 'cancelled_at' => null,
             ]);
+            DB::afterCommit(fn () => $this->cache->invalidateEntitlements($tenant->id));
 
             return $subscription->load('plan.features');
         });
@@ -108,6 +112,7 @@ class SubscriptionService
                 'ends_at' => $now,
                 'cancelled_at' => $now,
             ]);
+            DB::afterCommit(fn () => $this->cache->invalidateEntitlements($tenant->id));
 
             return $subscription->refresh()->load('plan.features');
         });
@@ -129,12 +134,16 @@ class SubscriptionService
 
     private function expireEndedSubscriptions(Tenant $tenant, CarbonImmutable $now): void
     {
-        Subscription::query()
+        $expired = Subscription::query()
             ->forTenant($tenant)
             ->where('status', SubscriptionStatus::Active->value)
             ->whereNotNull('ends_at')
             ->where('ends_at', '<=', $now)
             ->update(['status' => SubscriptionStatus::Expired->value]);
+
+        if ($expired > 0) {
+            DB::afterCommit(fn () => $this->cache->invalidateEntitlements($tenant->id));
+        }
     }
 
     private function activeQuery(Tenant $tenant, CarbonImmutable $now): Builder

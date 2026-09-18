@@ -21,6 +21,8 @@ use InvalidArgumentException;
 
 class EntitlementService
 {
+    public function __construct(private readonly TenantCacheService $cache) {}
+
     public function entitlement(Tenant $tenant, string $featureKey): ?FeatureEntitlement
     {
         return $this->resolve($tenant, $featureKey);
@@ -28,8 +30,16 @@ class EntitlementService
 
     public function snapshot(Tenant $tenant): EntitlementSnapshot
     {
+        return EntitlementSnapshot::fromArray($this->cache->rememberEntitlements(
+            $tenant->id,
+            fn (): array => $this->buildSnapshot($tenant)->toArray(),
+        ));
+    }
+
+    private function buildSnapshot(Tenant $tenant): EntitlementSnapshot
+    {
         if ($tenant->status !== 'active') {
-            return new EntitlementSnapshot(null, collect());
+            return new EntitlementSnapshot(null, []);
         }
 
         $now = CarbonImmutable::now();
@@ -45,7 +55,7 @@ class EntitlementService
             ->first();
 
         if ($subscription === null) {
-            return new EntitlementSnapshot(null, collect());
+            return new EntitlementSnapshot(null, []);
         }
 
         $periodStart = CarbonImmutable::instance($subscription->starts_at);
@@ -90,7 +100,33 @@ class EntitlementService
             );
         })->values();
 
-        return new EntitlementSnapshot($subscription, $features);
+        return new EntitlementSnapshot(
+            subscription: [
+                'id' => $subscription->id,
+                'status' => $subscription->status->value,
+                'starts_at' => $subscription->starts_at->toISOString(),
+                'ends_at' => $subscription->ends_at->toISOString(),
+                'plan' => [
+                    'id' => $subscription->plan->id,
+                    'name' => $subscription->plan->name,
+                    'slug' => $subscription->plan->slug,
+                    'price' => $subscription->plan->price,
+                    'billing_interval' => $subscription->plan->billing_interval,
+                ],
+            ],
+            features: $features->map(fn (FeatureEntitlement $entitlement): array => [
+                'key' => $entitlement->key,
+                'name' => $entitlement->name,
+                'type' => $entitlement->type->value,
+                'enabled' => $entitlement->enabled,
+                'available' => $entitlement->canUse(),
+                'usage' => $entitlement->type === FeatureType::Limit
+                    ? $entitlement->usage
+                    : null,
+                'limit' => $entitlement->limit,
+                'remaining' => $entitlement->remaining,
+            ])->all(),
+        );
     }
 
     public function canUseFeature(Tenant $tenant, string $featureKey): bool
@@ -147,6 +183,7 @@ class EntitlementService
             }
 
             $usage->increment('usage', $amount);
+            DB::afterCommit(fn () => $this->cache->invalidateEntitlements($lockedTenant->id));
 
             return $this->resolve($lockedTenant, $featureKey, true)
                 ?? throw new FeatureUnavailableException("Feature [{$featureKey}] is not available for this tenant.");
@@ -185,6 +222,7 @@ class EntitlementService
                 ],
                 ['usage' => $usage],
             );
+            DB::afterCommit(fn () => $this->cache->invalidateEntitlements($lockedTenant->id));
 
             return $this->resolve($lockedTenant, $featureKey, true)
                 ?? throw new FeatureUnavailableException("Feature [{$featureKey}] is not available for this tenant.");

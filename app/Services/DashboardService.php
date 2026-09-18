@@ -16,6 +16,7 @@ class DashboardService
     public function __construct(
         private readonly TenantContext $tenantContext,
         private readonly EntitlementService $entitlements,
+        private readonly TenantCacheService $cache,
     ) {}
 
     public function get(User $actor, int $tenantId): DashboardData
@@ -23,12 +24,18 @@ class DashboardService
         $tenant = $this->currentTenant($tenantId);
         Gate::forUser($actor)->authorize('viewDashboard', $tenant);
 
-        return new DashboardData(
-            tenant: $tenant,
+        $data = $this->cache->rememberDashboard($tenant->id, fn (): array => (new DashboardData(
+            tenant: [
+                'id' => $tenant->id,
+                'name' => $tenant->name,
+                'status' => $tenant->status,
+            ],
             users: $this->statusCounts('tenant_user', $tenant),
             customers: $this->statusCounts((new Customer)->getTable(), $tenant),
             entitlements: $this->entitlements->snapshot($tenant),
-        );
+        ))->toArray());
+
+        return DashboardData::fromArray($data);
     }
 
     /**

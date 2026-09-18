@@ -22,6 +22,7 @@ class TenantMembershipService
         private readonly TenantContext $tenantContext,
         private readonly EntitlementService $entitlements,
         private readonly RoleAssignmentService $roles,
+        private readonly TenantCacheService $cache,
     ) {}
 
     /**
@@ -82,6 +83,7 @@ class TenantMembershipService
             }
 
             $tenant->users()->updateExistingPivot($memberId, ['status' => $status]);
+            DB::afterCommit(fn () => $this->cache->invalidateDashboard($tenant->id));
 
             if ($status === 'inactive') {
                 $this->synchronizeUsage($tenant, false);
@@ -126,6 +128,7 @@ class TenantMembershipService
             $member->syncRoles([]);
             $tenant->users()->detach($memberId);
             $this->synchronizeUsage($tenant, false);
+            DB::afterCommit(fn () => $this->cache->invalidateDashboard($tenant->id));
         });
     }
 

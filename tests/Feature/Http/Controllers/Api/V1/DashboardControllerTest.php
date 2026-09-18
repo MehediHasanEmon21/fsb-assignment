@@ -11,9 +11,11 @@ use App\Models\Plan;
 use App\Models\Subscription;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\TenantCacheService;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
@@ -21,6 +23,13 @@ use Tests\TestCase;
 class DashboardControllerTest extends TestCase
 {
     use LazilyRefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Cache::clear();
+    }
 
     protected function tearDown(): void
     {
@@ -150,6 +159,95 @@ class DashboardControllerTest extends TestCase
         $this->assertFalse($queries->contains(
             fn (string $sql): bool => str_contains($sql, 'select * from "customers"'),
         ));
+    }
+
+    public function test_dashboard_response_is_served_from_the_tenant_cache(): void
+    {
+        [, $tenant, $token] = $this->dashboardActor();
+        $cache = app(TenantCacheService::class);
+
+        $this->tenantRequest($token, $tenant)
+            ->getJson("/api/v1/tenants/{$tenant->id}/dashboard")
+            ->assertOk()
+            ->assertJsonPath('data.metrics.customers.total', 0);
+
+        Customer::factory()->create(['tenant_id' => $tenant->id]);
+
+        $this->assertTrue(Cache::has($cache->dashboardKey($tenant->id)));
+        $this->tenantRequest($token, $tenant)
+            ->getJson("/api/v1/tenants/{$tenant->id}/dashboard")
+            ->assertOk()
+            ->assertJsonPath('data.metrics.customers.total', 0);
+    }
+
+    public function test_customer_mutation_invalidates_the_dashboard_and_entitlement_caches(): void
+    {
+        [$actor, $tenant, $token] = $this->dashboardActor();
+        $cache = app(TenantCacheService::class);
+        app(PermissionRegistrar::class)->setPermissionsTeamId($tenant->id);
+        $actor->syncRoles([RoleName::TenantAdmin->value]);
+        $actor->unsetRelation('roles');
+        app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+
+        $this->tenantRequest($token, $tenant)
+            ->getJson("/api/v1/tenants/{$tenant->id}/dashboard")
+            ->assertOk();
+
+        $this->assertTrue(Cache::has($cache->dashboardKey($tenant->id)));
+        $this->assertTrue(Cache::has($cache->entitlementsKey($tenant->id)));
+
+        $this->tenantRequest($token, $tenant)
+            ->postJson("/api/v1/tenants/{$tenant->id}/customers", [
+                'name' => 'Cached Customer',
+                'email' => 'cached@example.test',
+            ])
+            ->assertCreated();
+
+        $this->assertFalse(Cache::has($cache->dashboardKey($tenant->id)));
+        $this->assertFalse(Cache::has($cache->entitlementsKey($tenant->id)));
+
+        $this->tenantRequest($token, $tenant)
+            ->getJson("/api/v1/tenants/{$tenant->id}/dashboard")
+            ->assertOk()
+            ->assertJsonPath('data.metrics.customers.total', 1)
+            ->assertJsonPath('data.features.1.usage', 1)
+            ->assertJsonPath('data.features.1.remaining', 9);
+    }
+
+    public function test_dashboard_cache_entries_are_isolated_by_tenant(): void
+    {
+        [$actor, $firstTenant, $token, $subscription] = $this->dashboardActor();
+        Customer::factory()->create(['tenant_id' => $firstTenant->id]);
+        $secondTenant = Tenant::factory()->create();
+        $secondTenant->users()->attach($actor, ['status' => 'active']);
+        app(PermissionRegistrar::class)->setPermissionsTeamId($secondTenant->id);
+        $actor->unsetRelation('roles');
+        $actor->assignRole(RoleName::User->value);
+        app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+        Subscription::factory()->create([
+            'tenant_id' => $secondTenant->id,
+            'plan_id' => $subscription->plan_id,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addMonth(),
+        ]);
+        Customer::factory()->count(2)->create(['tenant_id' => $secondTenant->id]);
+        $cache = app(TenantCacheService::class);
+
+        $this->tenantRequest($token, $firstTenant)
+            ->getJson("/api/v1/tenants/{$firstTenant->id}/dashboard")
+            ->assertOk()
+            ->assertJsonPath('data.metrics.customers.total', 1);
+        $this->tenantRequest($token, $secondTenant)
+            ->getJson("/api/v1/tenants/{$secondTenant->id}/dashboard")
+            ->assertOk()
+            ->assertJsonPath('data.metrics.customers.total', 2);
+
+        $this->assertNotSame(
+            $cache->dashboardKey($firstTenant->id),
+            $cache->dashboardKey($secondTenant->id),
+        );
+        $this->assertTrue(Cache::has($cache->dashboardKey($firstTenant->id)));
+        $this->assertTrue(Cache::has($cache->dashboardKey($secondTenant->id)));
     }
 
     private function tenantRequest(string $token, Tenant $tenant): static

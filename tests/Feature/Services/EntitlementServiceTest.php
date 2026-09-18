@@ -14,6 +14,7 @@ use App\Models\Tenant;
 use App\Services\EntitlementService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use InvalidArgumentException;
 use Tests\TestCase;
 
@@ -28,6 +29,7 @@ class EntitlementServiceTest extends TestCase
         parent::setUp();
 
         CarbonImmutable::setTestNow('2026-09-18 12:00:00');
+        Cache::clear();
         $this->entitlements = app(EntitlementService::class);
     }
 
@@ -213,6 +215,34 @@ class EntitlementServiceTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         $this->entitlements->consume($tenant, 'customers', 0);
+    }
+
+    public function test_entitlement_snapshot_is_cached_and_invalidated_after_usage_changes(): void
+    {
+        [$tenant, , $feature, $subscription] = $this->tenantWithFeature(
+            'customers',
+            'limit',
+            '10',
+        );
+
+        $firstSnapshot = $this->entitlements->snapshot($tenant);
+        FeatureUsage::factory()->create([
+            'tenant_id' => $tenant->id,
+            'feature_id' => $feature->id,
+            'usage' => 4,
+            'period_start' => $subscription->starts_at,
+            'period_end' => $subscription->ends_at,
+        ]);
+        $cachedSnapshot = $this->entitlements->snapshot($tenant);
+
+        $this->assertSame(0, $firstSnapshot->features[0]['usage']);
+        $this->assertSame(0, $cachedSnapshot->features[0]['usage']);
+
+        $this->entitlements->synchronizeUsage($tenant, 'customers', 4);
+        $refreshedSnapshot = $this->entitlements->snapshot($tenant);
+
+        $this->assertSame(4, $refreshedSnapshot->features[0]['usage']);
+        $this->assertSame(6, $refreshedSnapshot->features[0]['remaining']);
     }
 
     /**
