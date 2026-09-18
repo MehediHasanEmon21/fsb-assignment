@@ -4,6 +4,9 @@ namespace Tests\Feature\Http\Controllers\Api\V1\Auth;
 
 use App\Enums\RoleName;
 use App\Http\Middleware\ResolveTenant;
+use App\Models\Feature;
+use App\Models\Plan;
+use App\Models\Subscription;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\UserService;
@@ -62,6 +65,14 @@ class RegisteredUserControllerTest extends TestCase
         $this->assertSame(0, $user->tokens()->count());
         $this->assertDatabaseCount('users', 2);
         $this->assertDatabaseCount('personal_access_tokens', 1);
+        $this->assertDatabaseHas('tenant_user', [
+            'tenant_id' => $tenant->id,
+            'user_id' => $user->id,
+            'status' => 'active',
+        ]);
+        app(PermissionRegistrar::class)->setPermissionsTeamId($tenant->id);
+        $this->assertTrue($user->fresh()->hasRole(RoleName::User->value));
+        app(PermissionRegistrar::class)->setPermissionsTeamId(null);
     }
 
     public function test_missing_input_returns_422_with_validation_errors(): void
@@ -169,11 +180,30 @@ class RegisteredUserControllerTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_user_creation_enforces_the_tenant_user_limit(): void
+    {
+        [, $tenant, $token] = $this->authorizedCreator(RoleName::TenantAdmin, 1);
+
+        $this->withToken($token)
+            ->withHeader(ResolveTenant::HEADER, (string) $tenant->id)
+            ->postJson('/api/v1/auth/register', [
+                'name' => 'Over Limit',
+                'email' => 'over-limit@example.com',
+                'password' => 'SecurePass1!',
+                'password_confirmation' => 'SecurePass1!',
+            ])
+            ->assertUnprocessable();
+
+        $this->assertDatabaseMissing('users', ['email' => 'over-limit@example.com']);
+    }
+
     /**
      * @return array{User, Tenant, string}
      */
-    private function authorizedCreator(RoleName $role = RoleName::TenantAdmin): array
-    {
+    private function authorizedCreator(
+        RoleName $role = RoleName::TenantAdmin,
+        int $userLimit = 10,
+    ): array {
         $this->seed(RolePermissionSeeder::class);
 
         $creator = User::factory()->create();
@@ -183,6 +213,19 @@ class RegisteredUserControllerTest extends TestCase
         app(PermissionRegistrar::class)->setPermissionsTeamId($tenant->id);
         $creator->assignRole($role->value);
         app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+
+        $plan = Plan::factory()->create();
+        $feature = Feature::query()->firstOrCreate(
+            ['key' => 'users'],
+            ['name' => 'Users', 'type' => 'limit'],
+        );
+        $plan->features()->attach($feature, ['value' => (string) $userLimit]);
+        Subscription::factory()->create([
+            'tenant_id' => $tenant->id,
+            'plan_id' => $plan->id,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addMonth(),
+        ]);
 
         return [$creator, $tenant, $creator->createToken('creator')->plainTextToken];
     }

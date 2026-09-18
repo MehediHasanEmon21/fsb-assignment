@@ -40,6 +40,18 @@ class TenantPolicy
             && $user->can(PermissionName::UsersUpdate->value);
     }
 
+    public function createMember(User $user, Tenant $tenant): bool
+    {
+        return $this->isActiveTenantMember($user, $tenant)
+            && $user->can(PermissionName::UsersCreate->value);
+    }
+
+    public function deleteMember(User $user, Tenant $tenant): bool
+    {
+        return $this->isActiveTenantMember($user, $tenant)
+            && $user->can(PermissionName::UsersDelete->value);
+    }
+
     public function viewSubscription(User $user, Tenant $tenant): bool
     {
         return $this->isActiveTenantMember($user, $tenant)

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Api\V1\Auth\CurrentUserController;
 use App\Http\Controllers\Api\V1\Auth\RegisteredUserController;
+use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\PlanController;
 use App\Http\Controllers\Api\V1\SubscriptionController;
 use App\Http\Controllers\Api\V1\TenantController;
@@ -61,6 +62,34 @@ Route::prefix('v1/tenants')
                 ->middleware('permission:users.update')
                 ->whereNumber(['tenant', 'member'])
                 ->name('members.update');
+            Route::patch('/{tenant}/members/{member}/role', [TenantMembershipController::class, 'updateRole'])
+                ->middleware('permission:users.update')
+                ->whereNumber(['tenant', 'member'])
+                ->name('members.role.update');
+            Route::delete('/{tenant}/members/{member}', [TenantMembershipController::class, 'destroy'])
+                ->middleware('permission:users.delete')
+                ->whereNumber(['tenant', 'member'])
+                ->name('members.destroy');
+            Route::get('/{tenant}/customers', [CustomerController::class, 'index'])
+                ->middleware('permission:customers.view')
+                ->whereNumber('tenant')
+                ->name('customers.index');
+            Route::post('/{tenant}/customers', [CustomerController::class, 'store'])
+                ->middleware('permission:customers.create')
+                ->whereNumber('tenant')
+                ->name('customers.store');
+            Route::get('/{tenant}/customers/{customer}', [CustomerController::class, 'show'])
+                ->middleware('permission:customers.view')
+                ->whereNumber(['tenant', 'customer'])
+                ->name('customers.show');
+            Route::patch('/{tenant}/customers/{customer}', [CustomerController::class, 'update'])
+                ->middleware('permission:customers.update')
+                ->whereNumber(['tenant', 'customer'])
+                ->name('customers.update');
+            Route::delete('/{tenant}/customers/{customer}', [CustomerController::class, 'destroy'])
+                ->middleware('permission:customers.delete')
+                ->whereNumber(['tenant', 'customer'])
+                ->name('customers.destroy');
             Route::get('/{tenant}/subscription', [SubscriptionController::class, 'show'])
                 ->middleware('permission:subscription.view')
                 ->whereNumber('tenant')

@@ -4,6 +4,9 @@ namespace Tests\Feature\Http\Controllers\Api\V1;
 
 use App\Enums\RoleName;
 use App\Http\Middleware\ResolveTenant;
+use App\Models\Feature;
+use App\Models\Plan;
+use App\Models\Subscription;
 use App\Models\Tenant;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
@@ -111,10 +114,139 @@ class TenantMembershipControllerTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_tenant_admin_can_change_a_member_role_without_assigning_admin_roles(): void
+    {
+        [, $tenant, $token] = $this->tenantAdmin();
+        $member = User::factory()->create();
+        $tenant->users()->attach($member, ['status' => 'active']);
+        app(PermissionRegistrar::class)->setPermissionsTeamId($tenant->id);
+        $member->assignRole(RoleName::User->value);
+        app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+
+        $this->withToken($token)
+            ->withHeader(ResolveTenant::HEADER, (string) $tenant->id)
+            ->patchJson("/api/v1/tenants/{$tenant->id}/members/{$member->id}/role", [
+                'role' => RoleName::Manager->value,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.roles.0', RoleName::Manager->value);
+
+        foreach ([RoleName::TenantAdmin, RoleName::SuperAdmin] as $role) {
+            $this->withToken($token)
+                ->withHeader(ResolveTenant::HEADER, (string) $tenant->id)
+                ->patchJson("/api/v1/tenants/{$tenant->id}/members/{$member->id}/role", [
+                    'role' => $role->value,
+                ])
+                ->assertForbidden();
+        }
+    }
+
+    public function test_role_and_status_endpoints_reject_a_member_id_from_another_tenant(): void
+    {
+        [, $tenant, $token] = $this->tenantAdmin();
+        $otherTenant = Tenant::factory()->create();
+        $otherMember = User::factory()->create();
+        $otherTenant->users()->attach($otherMember, ['status' => 'active']);
+
+        $this->withToken($token)
+            ->withHeader(ResolveTenant::HEADER, (string) $tenant->id)
+            ->patchJson("/api/v1/tenants/{$tenant->id}/members/{$otherMember->id}/role", [
+                'role' => RoleName::Manager->value,
+            ])
+            ->assertNotFound();
+
+        $this->withToken($token)
+            ->withHeader(ResolveTenant::HEADER, (string) $tenant->id)
+            ->deleteJson("/api/v1/tenants/{$tenant->id}/members/{$otherMember->id}")
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('tenant_user', [
+            'tenant_id' => $otherTenant->id,
+            'user_id' => $otherMember->id,
+        ]);
+    }
+
+    public function test_membership_activation_enforces_the_user_limit(): void
+    {
+        [, $tenant, $token] = $this->tenantAdmin(1);
+        $inactiveMember = User::factory()->create();
+        $tenant->users()->attach($inactiveMember, ['status' => 'inactive']);
+
+        $this->withToken($token)
+            ->withHeader(ResolveTenant::HEADER, (string) $tenant->id)
+            ->patchJson("/api/v1/tenants/{$tenant->id}/members/{$inactiveMember->id}", [
+                'status' => 'active',
+            ])
+            ->assertUnprocessable();
+
+        $this->assertDatabaseHas('tenant_user', [
+            'tenant_id' => $tenant->id,
+            'user_id' => $inactiveMember->id,
+            'status' => 'inactive',
+        ]);
+    }
+
+    public function test_tenant_admin_can_remove_a_member_without_deleting_global_identity(): void
+    {
+        [, $tenant, $token] = $this->tenantAdmin();
+        $member = User::factory()->create();
+        $tenant->users()->attach($member, ['status' => 'active']);
+        app(PermissionRegistrar::class)->setPermissionsTeamId($tenant->id);
+        $member->assignRole(RoleName::User->value);
+        app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+
+        $this->withToken($token)
+            ->withHeader(ResolveTenant::HEADER, (string) $tenant->id)
+            ->deleteJson("/api/v1/tenants/{$tenant->id}/members/{$member->id}")
+            ->assertOk();
+
+        $this->assertDatabaseMissing('tenant_user', [
+            'tenant_id' => $tenant->id,
+            'user_id' => $member->id,
+        ]);
+        $this->assertDatabaseHas('users', ['id' => $member->id]);
+        app(PermissionRegistrar::class)->setPermissionsTeamId($tenant->id);
+        $this->assertFalse($member->fresh()->hasAnyRole(array_column(RoleName::cases(), 'value')));
+        app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+    }
+
+    public function test_tenant_admin_cannot_deactivate_their_own_membership(): void
+    {
+        [$admin, $tenant, $token] = $this->tenantAdmin();
+
+        $this->withToken($token)
+            ->withHeader(ResolveTenant::HEADER, (string) $tenant->id)
+            ->patchJson("/api/v1/tenants/{$tenant->id}/members/{$admin->id}", [
+                'status' => 'inactive',
+            ])
+            ->assertForbidden();
+    }
+
+    public function test_member_can_be_deactivated_without_an_active_subscription(): void
+    {
+        [, $tenant, $token] = $this->tenantAdmin();
+        $member = User::factory()->create();
+        $tenant->users()->attach($member, ['status' => 'active']);
+        Subscription::query()->forTenant($tenant)->delete();
+
+        $this->withToken($token)
+            ->withHeader(ResolveTenant::HEADER, (string) $tenant->id)
+            ->patchJson("/api/v1/tenants/{$tenant->id}/members/{$member->id}", [
+                'status' => 'inactive',
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('tenant_user', [
+            'tenant_id' => $tenant->id,
+            'user_id' => $member->id,
+            'status' => 'inactive',
+        ]);
+    }
+
     /**
      * @return array{User, Tenant, string}
      */
-    private function tenantAdmin(): array
+    private function tenantAdmin(int $userLimit = 10): array
     {
         $this->seed(RolePermissionSeeder::class);
         $admin = User::factory()->create();
@@ -123,6 +255,19 @@ class TenantMembershipControllerTest extends TestCase
         app(PermissionRegistrar::class)->setPermissionsTeamId($tenant->id);
         $admin->assignRole(RoleName::TenantAdmin->value);
         app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+
+        $plan = Plan::factory()->create();
+        $feature = Feature::query()->firstOrCreate(
+            ['key' => 'users'],
+            ['name' => 'Users', 'type' => 'limit'],
+        );
+        $plan->features()->attach($feature, ['value' => (string) $userLimit]);
+        Subscription::factory()->create([
+            'tenant_id' => $tenant->id,
+            'plan_id' => $plan->id,
+            'starts_at' => now()->subDay(),
+            'ends_at' => now()->addMonth(),
+        ]);
 
         return [$admin, $tenant, $admin->createToken('test')->plainTextToken];
     }

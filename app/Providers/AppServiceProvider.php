@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\Customer;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Policies\CustomerPolicy;
 use App\Policies\TenantPolicy;
 use App\Policies\UserPolicy;
 use App\Tenancy\TenantContext;
@@ -29,6 +31,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Gate::policy(Customer::class, CustomerPolicy::class);
         Gate::policy(Tenant::class, TenantPolicy::class);
         Gate::policy(User::class, UserPolicy::class);
         Gate::before(
