@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Api\V1\Auth\CurrentUserController;
 use App\Http\Controllers\Api\V1\Auth\RegisteredUserController;
 use App\Http\Controllers\Api\V1\CustomerController;
+use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\PlanController;
 use App\Http\Controllers\Api\V1\SubscriptionController;
 use App\Http\Controllers\Api\V1\TenantController;
@@ -90,6 +91,10 @@ Route::prefix('v1/tenants')
                 ->middleware('permission:customers.delete')
                 ->whereNumber(['tenant', 'customer'])
                 ->name('customers.destroy');
+            Route::get('/{tenant}/dashboard', DashboardController::class)
+                ->middleware('permission:dashboard.view')
+                ->whereNumber('tenant')
+                ->name('dashboard.show');
             Route::get('/{tenant}/subscription', [SubscriptionController::class, 'show'])
                 ->middleware('permission:subscription.view')
                 ->whereNumber('tenant')

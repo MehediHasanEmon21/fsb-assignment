@@ -64,6 +64,12 @@ class TenantPolicy
             && $user->can(PermissionName::SubscriptionManage->value);
     }
 
+    public function viewDashboard(User $user, Tenant $tenant): bool
+    {
+        return $this->isActiveTenantMember($user, $tenant)
+            && $user->can(PermissionName::DashboardView->value);
+    }
+
     private function isActiveTenantMember(User $user, Tenant $tenant): bool
     {
         return $this->tenantContext->has()

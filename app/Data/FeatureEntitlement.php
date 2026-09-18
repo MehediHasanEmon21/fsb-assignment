@@ -10,6 +10,7 @@ final readonly class FeatureEntitlement
     public function __construct(
         public int $featureId,
         public string $key,
+        public string $name,
         public FeatureType $type,
         public bool $enabled,
         public ?int $limit,

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Data\EntitlementSnapshot;
 use App\Data\FeatureEntitlement;
 use App\Enums\FeatureType;
 use App\Enums\SubscriptionStatus;
@@ -14,6 +15,7 @@ use App\Models\Subscription;
 use App\Models\Tenant;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -22,6 +24,73 @@ class EntitlementService
     public function entitlement(Tenant $tenant, string $featureKey): ?FeatureEntitlement
     {
         return $this->resolve($tenant, $featureKey);
+    }
+
+    public function snapshot(Tenant $tenant): EntitlementSnapshot
+    {
+        if ($tenant->status !== 'active') {
+            return new EntitlementSnapshot(null, collect());
+        }
+
+        $now = CarbonImmutable::now();
+        $subscription = Subscription::query()
+            ->forTenant($tenant)
+            ->where('status', SubscriptionStatus::Active->value)
+            ->whereNotNull('starts_at')
+            ->whereNotNull('ends_at')
+            ->where('starts_at', '<=', $now)
+            ->where('ends_at', '>', $now)
+            ->with('plan.planFeatures.feature')
+            ->latest('starts_at')
+            ->first();
+
+        if ($subscription === null) {
+            return new EntitlementSnapshot(null, collect());
+        }
+
+        $periodStart = CarbonImmutable::instance($subscription->starts_at);
+        $periodEnd = CarbonImmutable::instance($subscription->ends_at);
+        $planFeatures = $subscription->plan->planFeatures;
+        $usages = FeatureUsage::query()
+            ->forTenant($tenant)
+            ->whereIn('feature_id', $planFeatures->pluck('feature_id'))
+            ->where('period_start', $periodStart)
+            ->where('period_end', $periodEnd)
+            ->pluck('usage', 'feature_id');
+
+        /** @var Collection<int, FeatureEntitlement> $features */
+        $features = $planFeatures->map(function (PlanFeature $planFeature) use (
+            $periodStart,
+            $periodEnd,
+            $usages,
+        ): FeatureEntitlement {
+            $type = FeatureType::tryFrom($planFeature->feature->type)
+                ?? throw new FeatureConfigurationException(
+                    "Feature [{$planFeature->feature->key}] has an unsupported type.",
+                );
+
+            if ($type === FeatureType::Boolean) {
+                return $this->booleanEntitlement($planFeature, $periodStart, $periodEnd);
+            }
+
+            $limit = $this->limitValue($planFeature->value, $planFeature->feature->key);
+            $usage = (int) ($usages->get($planFeature->feature_id) ?? 0);
+
+            return new FeatureEntitlement(
+                featureId: $planFeature->feature_id,
+                key: $planFeature->feature->key,
+                name: $planFeature->feature->name,
+                type: $type,
+                enabled: true,
+                limit: $limit,
+                usage: $usage,
+                remaining: max(0, $limit - $usage),
+                periodStart: $periodStart,
+                periodEnd: $periodEnd,
+            );
+        })->values();
+
+        return new EntitlementSnapshot($subscription, $features);
     }
 
     public function canUseFeature(Tenant $tenant, string $featureKey): bool
@@ -172,17 +241,7 @@ class EntitlementService
         $periodEnd = CarbonImmutable::instance($subscription->ends_at);
 
         if ($type === FeatureType::Boolean) {
-            return new FeatureEntitlement(
-                featureId: $planFeature->feature_id,
-                key: $featureKey,
-                type: $type,
-                enabled: $this->booleanValue($planFeature->value, $featureKey),
-                limit: null,
-                usage: 0,
-                remaining: null,
-                periodStart: $periodStart,
-                periodEnd: $periodEnd,
-            );
+            return $this->booleanEntitlement($planFeature, $periodStart, $periodEnd);
         }
 
         $limit = $this->limitValue($planFeature->value, $featureKey);
@@ -201,11 +260,33 @@ class EntitlementService
         return new FeatureEntitlement(
             featureId: $planFeature->feature_id,
             key: $featureKey,
+            name: $planFeature->feature->name,
             type: $type,
             enabled: true,
             limit: $limit,
             usage: $usage,
             remaining: max(0, $limit - $usage),
+            periodStart: $periodStart,
+            periodEnd: $periodEnd,
+        );
+    }
+
+    private function booleanEntitlement(
+        PlanFeature $planFeature,
+        CarbonImmutable $periodStart,
+        CarbonImmutable $periodEnd,
+    ): FeatureEntitlement {
+        $featureKey = $planFeature->feature->key;
+
+        return new FeatureEntitlement(
+            featureId: $planFeature->feature_id,
+            key: $featureKey,
+            name: $planFeature->feature->name,
+            type: FeatureType::Boolean,
+            enabled: $this->booleanValue($planFeature->value, $featureKey),
+            limit: null,
+            usage: 0,
+            remaining: null,
             periodStart: $periodStart,
             periodEnd: $periodEnd,
         );
