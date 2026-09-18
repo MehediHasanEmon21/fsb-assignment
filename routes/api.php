@@ -3,6 +3,11 @@
 use App\Http\Controllers\Api\V1\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Api\V1\Auth\CurrentUserController;
 use App\Http\Controllers\Api\V1\Auth\RegisteredUserController;
+use App\Http\Controllers\Api\V1\PlanController;
+use App\Http\Controllers\Api\V1\SubscriptionController;
+use App\Http\Controllers\Api\V1\TenantController;
+use App\Http\Controllers\Api\V1\TenantMembershipController;
+use App\Models\Tenant;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1/auth')->name('api.v1.auth.')->group(function () {
@@ -19,3 +24,54 @@ Route::prefix('v1/auth')->name('api.v1.auth.')->group(function () {
             ->name('logout');
     });
 });
+
+Route::prefix('v1/plans')
+    ->name('api.v1.plans.')
+    ->middleware('auth:sanctum')
+    ->group(function () {
+        Route::get('/', [PlanController::class, 'index'])->name('index');
+        Route::get('/{plan}', [PlanController::class, 'show'])
+            ->whereNumber('plan')
+            ->name('show');
+    });
+
+Route::prefix('v1/tenants')
+    ->name('api.v1.tenants.')
+    ->middleware('auth:sanctum')
+    ->group(function () {
+        Route::get('/', [TenantController::class, 'index'])->name('index');
+        Route::post('/', [TenantController::class, 'store'])
+            ->middleware('can:create,'.Tenant::class)
+            ->name('store');
+
+        Route::middleware(['tenant', 'tenant.permissions'])->group(function () {
+            Route::get('/{tenant}', [TenantController::class, 'show'])
+                ->middleware('permission:tenant.view')
+                ->whereNumber('tenant')
+                ->name('show');
+            Route::patch('/{tenant}', [TenantController::class, 'update'])
+                ->middleware('permission:tenant.update')
+                ->whereNumber('tenant')
+                ->name('update');
+            Route::get('/{tenant}/members', [TenantMembershipController::class, 'index'])
+                ->middleware('permission:users.view')
+                ->whereNumber('tenant')
+                ->name('members.index');
+            Route::patch('/{tenant}/members/{member}', [TenantMembershipController::class, 'update'])
+                ->middleware('permission:users.update')
+                ->whereNumber(['tenant', 'member'])
+                ->name('members.update');
+            Route::get('/{tenant}/subscription', [SubscriptionController::class, 'show'])
+                ->middleware('permission:subscription.view')
+                ->whereNumber('tenant')
+                ->name('subscription.show');
+            Route::put('/{tenant}/subscription', [SubscriptionController::class, 'update'])
+                ->middleware('permission:subscription.manage')
+                ->whereNumber('tenant')
+                ->name('subscription.update');
+            Route::delete('/{tenant}/subscription', [SubscriptionController::class, 'destroy'])
+                ->middleware('permission:subscription.manage')
+                ->whereNumber('tenant')
+                ->name('subscription.destroy');
+        });
+    });

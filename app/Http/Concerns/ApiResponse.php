@@ -2,6 +2,7 @@
 
 namespace App\Http\Concerns;
 
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\JsonResponse;
 use Throwable;
 
@@ -17,6 +18,22 @@ trait ApiResponse
             'message' => $message,
             'data' => $data,
         ], $status);
+    }
+
+    protected function paginatedResponse(
+        LengthAwarePaginator $paginator,
+        mixed $items,
+        string $message = 'Request successful.',
+    ): JsonResponse {
+        return $this->successResponse([
+            'items' => $items,
+            'pagination' => [
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+            ],
+        ], $message);
     }
 
     /**

@@ -77,4 +77,20 @@ class TenantResolverTest extends TestCase
 
         $this->assertTrue($resolvedTenant->is($platformTenant));
     }
+
+    public function test_super_admin_can_resolve_an_inactive_tenant_for_platform_management(): void
+    {
+        $this->seed(RolePermissionSeeder::class);
+        $superAdmin = User::factory()->create();
+        $assignmentTenant = Tenant::factory()->create();
+        $inactiveTenant = Tenant::factory()->inactive()->create();
+
+        app(PermissionRegistrar::class)->setPermissionsTeamId($assignmentTenant->id);
+        $superAdmin->assignRole(RoleName::SuperAdmin->value);
+        app(PermissionRegistrar::class)->setPermissionsTeamId(null);
+
+        $resolvedTenant = app(TenantResolver::class)->resolve($superAdmin, $inactiveTenant->id);
+
+        $this->assertTrue($resolvedTenant->is($inactiveTenant));
+    }
 }

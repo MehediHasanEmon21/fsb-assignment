@@ -17,10 +17,39 @@ class TenantPolicy
             && $user->can(PermissionName::TenantView->value);
     }
 
+    public function create(User $user): bool
+    {
+        return $user->isSuperAdmin();
+    }
+
     public function update(User $user, Tenant $tenant): bool
     {
         return $this->isActiveTenantMember($user, $tenant)
             && $user->can(PermissionName::TenantUpdate->value);
+    }
+
+    public function viewMembers(User $user, Tenant $tenant): bool
+    {
+        return $this->isActiveTenantMember($user, $tenant)
+            && $user->can(PermissionName::UsersView->value);
+    }
+
+    public function updateMember(User $user, Tenant $tenant): bool
+    {
+        return $this->isActiveTenantMember($user, $tenant)
+            && $user->can(PermissionName::UsersUpdate->value);
+    }
+
+    public function viewSubscription(User $user, Tenant $tenant): bool
+    {
+        return $this->isActiveTenantMember($user, $tenant)
+            && $user->can(PermissionName::SubscriptionView->value);
+    }
+
+    public function manageSubscription(User $user, Tenant $tenant): bool
+    {
+        return $this->isActiveTenantMember($user, $tenant)
+            && $user->can(PermissionName::SubscriptionManage->value);
     }
 
     private function isActiveTenantMember(User $user, Tenant $tenant): bool

@@ -10,6 +10,8 @@ use App\Services\UserService;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Mockery;
 use RuntimeException;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
@@ -115,10 +117,12 @@ class RegisteredUserControllerTest extends TestCase
     public function test_unexpected_service_exception_returns_generic_500(): void
     {
         [, $tenant, $token] = $this->authorizedCreator();
+        $exception = new RuntimeException('sensitive database detail');
+        Log::spy();
         $this->mock(UserService::class)
             ->shouldReceive('create')
             ->once()
-            ->andThrow(new RuntimeException('sensitive database detail'));
+            ->andThrow($exception);
 
         $response = $this->withToken($token)
             ->withHeader(ResolveTenant::HEADER, (string) $tenant->id)
@@ -136,6 +140,14 @@ class RegisteredUserControllerTest extends TestCase
             ]);
         $response->assertDontSee('sensitive database detail');
         $this->assertDatabaseCount('users', 1);
+        Log::shouldHaveReceived('error')
+            ->once()
+            ->with(
+                'sensitive database detail',
+                Mockery::on(
+                    fn (array $context): bool => ($context['exception'] ?? null) === $exception,
+                ),
+            );
     }
 
     public function test_authenticated_user_must_select_a_tenant(): void

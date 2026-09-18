@@ -60,6 +60,18 @@ class CoreDatabaseSchemaTest extends TestCase
         $tenant->users()->attach($user, ['status' => 'active']);
     }
 
+    public function test_tenant_email_is_required_by_the_database(): void
+    {
+        $this->expectException(QueryException::class);
+
+        Tenant::query()->create([
+            'name' => 'Missing Email Company',
+            'slug' => 'missing-email-company',
+            'email' => null,
+            'status' => 'active',
+        ]);
+    }
+
     public function test_customer_email_must_be_unique_within_a_tenant(): void
     {
         $tenant = Tenant::factory()->create();

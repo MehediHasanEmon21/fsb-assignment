@@ -26,6 +26,10 @@ class User extends Authenticatable
 
     public function isSuperAdmin(): bool
     {
+        if ($this->status !== 'active') {
+            return false;
+        }
+
         $roleTable = config('permission.table_names.roles');
         $modelRoleTable = config('permission.table_names.model_has_roles');
 

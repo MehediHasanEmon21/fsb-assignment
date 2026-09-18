@@ -18,7 +18,7 @@ class TenantResolver
         }
 
         $tenant = $user->isSuperAdmin()
-            ? Tenant::query()->where('status', 'active')->whereKey($tenantId)->first()
+            ? Tenant::query()->whereKey($tenantId)->first()
             : $user->accessibleTenants()->whereKey($tenantId)->first();
 
         if ($tenant === null) {
