@@ -1,7 +1,7 @@
 *.log
 .DS_Store
 AGENTS.md
-docs/
+assesment/
 .env
 .env.backup
 .env.production

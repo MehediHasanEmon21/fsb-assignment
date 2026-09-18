@@ -1,0 +1,1302 @@
+openapi: 3.1.0
+info:
+  title: SaaS Subscription & Tenant Management API
+  version: 1.0.0
+  description: |
+    REST API for tenant management, subscriptions, feature limits, customer
+    management, tenant users, and dashboard analytics.
+
+    Public registration is disabled. Users are created by authenticated tenant
+    administrators through `POST /api/v1/auth/register`.
+servers:
+  - url: http://localhost/api/v1
+    description: Local Docker API base URL
+tags:
+  - name: Authentication
+  - name: Plans
+  - name: Tenants
+  - name: Tenant Members
+  - name: Customers
+  - name: Subscriptions
+  - name: Dashboard
+security:
+  - bearerAuth: []
+paths:
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login and create a Sanctum bearer token
+      description: Rate limited by normalized email and client IP.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            examples:
+              default:
+                value:
+                  email: admin@example.com
+                  password: password
+                  device_name: workstation
+      responses:
+        "200":
+          description: Login successful.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        required: [user, token]
+                        properties:
+                          user:
+                            $ref: "#/components/schemas/User"
+                          token:
+                            type: string
+                            example: "1|saas_example_token"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Revoke the current Sanctum token
+      responses:
+        "200":
+          description: Logout successful.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NullSuccessEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /auth/me:
+    get:
+      tags: [Authentication]
+      summary: Return the authenticated user
+      responses:
+        "200":
+          description: Authenticated user retrieved successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Create a tenant user
+      description: |
+        Requires a bearer token, `X-Tenant-ID`, active tenant membership, and
+        `users.create` permission. The new user is attached to the selected
+        tenant and assigned the default `user` role.
+      parameters:
+        - $ref: "#/components/parameters/TenantHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            examples:
+              default:
+                value:
+                  name: Jane Doe
+                  email: jane@example.com
+                  password: SecurePass1!
+                  password_confirmation: SecurePass1!
+      responses:
+        "201":
+          description: User created successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /plans:
+    get:
+      tags: [Plans]
+      summary: List active plans
+      parameters:
+        - $ref: "#/components/parameters/Search"
+        - name: billing_interval
+          in: query
+          schema:
+            type: string
+            enum: [monthly, yearly]
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [name, price, created_at]
+        - $ref: "#/components/parameters/Direction"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Plans retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedPlans"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /plans/{plan}:
+    get:
+      tags: [Plans]
+      summary: Show an active plan with features
+      parameters:
+        - $ref: "#/components/parameters/PlanId"
+      responses:
+        "200":
+          description: Plan retrieved successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Plan"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /tenants:
+    get:
+      tags: [Tenants]
+      summary: List tenants accessible to the authenticated user
+      parameters:
+        - $ref: "#/components/parameters/Search"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive]
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [name, slug, created_at]
+        - $ref: "#/components/parameters/Direction"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Tenants retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedTenants"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    post:
+      tags: [Tenants]
+      summary: Create a tenant and initial tenant administrator
+      description: |
+        Super admin only. The tenant email is also used to create the initial
+        tenant administrator with a temporary password of `password`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreTenantRequest"
+      responses:
+        "201":
+          description: Tenant created successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Tenant"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /tenants/{tenant}:
+    get:
+      tags: [Tenants]
+      summary: Show the selected tenant
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/TenantHeader"
+      responses:
+        "200":
+          description: Tenant retrieved successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Tenant"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Tenants]
+      summary: Update the selected tenant
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/TenantHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTenantRequest"
+      responses:
+        "200":
+          description: Tenant updated successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Tenant"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /tenants/{tenant}/members:
+    get:
+      tags: [Tenant Members]
+      summary: List tenant members
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/TenantHeader"
+        - $ref: "#/components/parameters/Search"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive]
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [name, email, created_at]
+        - $ref: "#/components/parameters/Direction"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Tenant members retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedTenantMembers"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /tenants/{tenant}/members/{member}:
+    patch:
+      tags: [Tenant Members]
+      summary: Update a tenant member status
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/MemberId"
+        - $ref: "#/components/parameters/TenantHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTenantMemberRequest"
+      responses:
+        "200":
+          description: Tenant member updated successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/TenantMember"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Tenant Members]
+      summary: Remove a member from the tenant
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/MemberId"
+        - $ref: "#/components/parameters/TenantHeader"
+      responses:
+        "200":
+          description: Tenant member removed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NullSuccessEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /tenants/{tenant}/members/{member}/role:
+    patch:
+      tags: [Tenant Members]
+      summary: Change a tenant member role
+      description: Tenant admins may assign `manager` or `user`; platform admins can manage admin roles.
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/MemberId"
+        - $ref: "#/components/parameters/TenantHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTenantMemberRoleRequest"
+      responses:
+        "200":
+          description: Tenant member role updated successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/TenantMember"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /tenants/{tenant}/customers:
+    get:
+      tags: [Customers]
+      summary: List tenant customers
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/TenantHeader"
+        - $ref: "#/components/parameters/Search"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive]
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [name, email, status, created_at]
+        - $ref: "#/components/parameters/Direction"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: Customers retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedCustomers"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    post:
+      tags: [Customers]
+      summary: Create a customer
+      description: Enforces the tenant's active `customers` feature limit.
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/TenantHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoreCustomerRequest"
+      responses:
+        "201":
+          description: Customer created successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Customer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /tenants/{tenant}/customers/{customer}:
+    get:
+      tags: [Customers]
+      summary: Show a tenant customer
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/TenantHeader"
+      responses:
+        "200":
+          description: Customer retrieved successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Customer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Customers]
+      summary: Update a tenant customer
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/TenantHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCustomerRequest"
+      responses:
+        "200":
+          description: Customer updated successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Customer"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Customers]
+      summary: Delete a tenant customer
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/CustomerId"
+        - $ref: "#/components/parameters/TenantHeader"
+      responses:
+        "200":
+          description: Customer deleted successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NullSuccessEnvelope"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /tenants/{tenant}/dashboard:
+    get:
+      tags: [Dashboard]
+      summary: Show tenant dashboard metrics
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/TenantHeader"
+      responses:
+        "200":
+          description: Dashboard retrieved successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Dashboard"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /tenants/{tenant}/subscription:
+    get:
+      tags: [Subscriptions]
+      summary: Show the tenant's active subscription
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/TenantHeader"
+      responses:
+        "200":
+          description: Active subscription retrieved successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Subscription"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Subscriptions]
+      summary: Assign or change the tenant subscription plan
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/TenantHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertSubscriptionRequest"
+      responses:
+        "200":
+          description: Subscription updated successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Subscription"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Subscriptions]
+      summary: Cancel the tenant's active subscription
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/TenantHeader"
+      responses:
+        "200":
+          description: Subscription cancelled successfully.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessEnvelope"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Subscription"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum
+  parameters:
+    TenantHeader:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+      description: Required for tenant-scoped routes. Must identify a tenant the user can access.
+    Search:
+      name: search
+      in: query
+      schema:
+        type: string
+        maxLength: 100
+    Direction:
+      name: direction
+      in: query
+      schema:
+        type: string
+        enum: [asc, desc]
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+    PerPage:
+      name: per_page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+      description: Defaults to 15 when omitted.
+    PlanId:
+      name: plan
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    TenantId:
+      name: tenant
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    MemberId:
+      name: member
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    CustomerId:
+      name: customer
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  responses:
+    BadRequest:
+      description: Bad request, commonly missing or invalid tenant header.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          example:
+            success: false
+            message: A valid X-Tenant-ID header is required.
+    Unauthenticated:
+      description: Missing, invalid, revoked, expired, or inactive-user token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          example:
+            success: false
+            message: Unauthenticated.
+    Forbidden:
+      description: Authenticated but not authorized for the operation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          example:
+            success: false
+            message: This action is unauthorized.
+    NotFound:
+      description: Resource not found or not visible within the current tenant boundary.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+          example:
+            success: false
+            message: Resource not found.
+    ValidationError:
+      description: Validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorEnvelope"
+          example:
+            success: false
+            message: The name field is required.
+            errors:
+              name:
+                - The name field is required.
+    TooManyRequests:
+      description: Rate limit exceeded.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until the client may retry.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+  schemas:
+    SuccessEnvelope:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        message:
+          type: string
+        data: {}
+    NullSuccessEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              type: "null"
+          example:
+            success: true
+            message: Request successful.
+            data: null
+    ErrorEnvelope:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+          const: false
+        message:
+          type: string
+    ValidationErrorEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/ErrorEnvelope"
+        - type: object
+          required: [errors]
+          properties:
+            errors:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  type: string
+    Pagination:
+      type: object
+      required: [current_page, last_page, per_page, total]
+      properties:
+        current_page:
+          type: integer
+        last_page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          maxLength: 255
+        device_name:
+          type: string
+          nullable: true
+          maxLength: 255
+    RegisterRequest:
+      type: object
+      required: [name, email, password, password_confirmation]
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        password:
+          type: string
+          minLength: 8
+          maxLength: 255
+          description: Must include mixed case, numbers, symbols, and match `password_confirmation`.
+        password_confirmation:
+          type: string
+    StoreTenantRequest:
+      type: object
+      required: [name, slug, email]
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        slug:
+          type: string
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          maxLength: 255
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          description: Must be unique in users because it creates the tenant admin login.
+    UpdateTenantRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        slug:
+          type: string
+          pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          maxLength: 255
+        email:
+          type: string
+          format: email
+          maxLength: 255
+        status:
+          type: string
+          enum: [active, inactive]
+          description: Platform status changes are restricted to super admins.
+    UpdateTenantMemberRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [active, inactive]
+    UpdateTenantMemberRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [superadmin, tenant_admin, manager, user]
+    StoreCustomerRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        email:
+          type: string
+          format: email
+          nullable: true
+          maxLength: 255
+          description: Unique within the selected tenant when present.
+        phone:
+          type: string
+          nullable: true
+          maxLength: 50
+        status:
+          type: string
+          enum: [active, inactive]
+          default: active
+    UpdateCustomerRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        email:
+          type: string
+          format: email
+          nullable: true
+          maxLength: 255
+        phone:
+          type: string
+          nullable: true
+          maxLength: 50
+        status:
+          type: string
+          enum: [active, inactive]
+    UpsertSubscriptionRequest:
+      type: object
+      required: [plan_id]
+      properties:
+        plan_id:
+          type: integer
+          minimum: 1
+          description: Must reference an active plan.
+    User:
+      type: object
+      required: [id, name, email, status, email_verified_at, created_at]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [active, inactive]
+        email_verified_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    Tenant:
+      type: object
+      required: [id, name, slug, email, status, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [active, inactive]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TenantMember:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          properties:
+            membership_status:
+              type: string
+              enum: [active, inactive]
+            roles:
+              type: array
+              items:
+                type: string
+                enum: [superadmin, tenant_admin, manager, user]
+    Customer:
+      type: object
+      required: [id, name, email, phone, status, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Feature:
+      type: object
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [boolean, limit]
+        value:
+          type: string
+    Plan:
+      type: object
+      required: [id, name, slug, description, price, billing_interval, status, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+          nullable: true
+        price:
+          type: number
+          format: float
+        billing_interval:
+          type: string
+          enum: [monthly, yearly]
+        status:
+          type: string
+          enum: [active, inactive]
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/Feature"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+          enum: [active, cancelled, expired]
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        plan:
+          $ref: "#/components/schemas/Plan"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Dashboard:
+      type: object
+      properties:
+        tenant:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            status:
+              type: string
+        metrics:
+          type: object
+          properties:
+            users:
+              $ref: "#/components/schemas/StatusMetrics"
+            customers:
+              $ref: "#/components/schemas/StatusMetrics"
+        subscription:
+          oneOf:
+            - $ref: "#/components/schemas/Subscription"
+            - type: "null"
+        features:
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+              name:
+                type: string
+              type:
+                type: string
+              enabled:
+                type: boolean
+              available:
+                type: boolean
+              limit:
+                type: integer
+                nullable: true
+              usage:
+                type: integer
+                nullable: true
+              remaining:
+                type: integer
+                nullable: true
+    StatusMetrics:
+      type: object
+      required: [total, active, inactive]
+      properties:
+        total:
+          type: integer
+        active:
+          type: integer
+        inactive:
+          type: integer
+    PaginatedPlans:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/Plan"
+                pagination:
+                  $ref: "#/components/schemas/Pagination"
+    PaginatedTenants:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/Tenant"
+                pagination:
+                  $ref: "#/components/schemas/Pagination"
+    PaginatedTenantMembers:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/TenantMember"
+                pagination:
+                  $ref: "#/components/schemas/Pagination"
+    PaginatedCustomers:
+      allOf:
+        - $ref: "#/components/schemas/SuccessEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/Customer"
+                pagination:
+                  $ref: "#/components/schemas/Pagination"
