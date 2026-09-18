@@ -33,6 +33,9 @@ class AuthenticatedSessionControllerTest extends TestCase
             ->assertJsonMissing(['password', 'remember_token']);
 
         $this->assertSame('integration-test', $user->tokens()->value('name'));
+        $this->assertSame(['api'], $user->tokens()->firstOrFail()->abilities);
+        $this->assertNotNull($user->tokens()->firstOrFail()->expires_at);
+        $this->assertStringContainsString('|saas_', $response->json('data.token'));
         $this->assertDatabaseCount('personal_access_tokens', 1);
     }
 

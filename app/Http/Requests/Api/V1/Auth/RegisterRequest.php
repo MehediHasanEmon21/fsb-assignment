@@ -38,6 +38,7 @@ class RegisterRequest extends FormRequest
             'password' => [
                 'required',
                 'string',
+                'max:255',
                 'confirmed',
                 Password::min(8)->mixedCase()->numbers()->symbols(),
             ],

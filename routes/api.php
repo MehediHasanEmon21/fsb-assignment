@@ -17,7 +17,7 @@ Route::prefix('v1/auth')->name('api.v1.auth.')->group(function () {
         ->middleware('throttle:login')
         ->name('login');
 
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', 'active.user', 'abilities:api'])->group(function () {
         Route::post('/register', [RegisteredUserController::class, 'store'])
             ->middleware(['tenant', 'tenant.permissions', 'permission:users.create'])
             ->name('register');
@@ -29,7 +29,7 @@ Route::prefix('v1/auth')->name('api.v1.auth.')->group(function () {
 
 Route::prefix('v1/plans')
     ->name('api.v1.plans.')
-    ->middleware('auth:sanctum')
+    ->middleware(['auth:sanctum', 'active.user', 'abilities:api'])
     ->group(function () {
         Route::get('/', [PlanController::class, 'index'])->name('index');
         Route::get('/{plan}', [PlanController::class, 'show'])
@@ -39,7 +39,7 @@ Route::prefix('v1/plans')
 
 Route::prefix('v1/tenants')
     ->name('api.v1.tenants.')
-    ->middleware('auth:sanctum')
+    ->middleware(['auth:sanctum', 'active.user', 'abilities:api'])
     ->group(function () {
         Route::get('/', [TenantController::class, 'index'])->name('index');
         Route::post('/', [TenantController::class, 'store'])

@@ -29,10 +29,12 @@ class AuthenticationService
         }
 
         $tokenName = trim($deviceName) !== '' ? $deviceName : self::DEFAULT_TOKEN_NAME;
+        $expiration = (int) config('sanctum.expiration');
+        $expiresAt = $expiration > 0 ? now()->addMinutes($expiration) : null;
 
         return [
             'user' => $user,
-            'token' => $user->createToken($tokenName)->plainTextToken,
+            'token' => $user->createToken($tokenName, ['api'], $expiresAt)->plainTextToken,
         ];
     }
 

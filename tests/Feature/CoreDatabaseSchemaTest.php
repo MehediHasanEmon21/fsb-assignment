@@ -37,6 +37,43 @@ class CoreDatabaseSchemaTest extends TestCase
         }
     }
 
+    public function test_performance_indexes_match_the_application_query_shapes(): void
+    {
+        $expectedIndexes = [
+            'tenant_user' => [
+                'tenant_user_tenant_status_index' => ['tenant_id', 'status'],
+            ],
+            'subscriptions' => [
+                'subscriptions_tenant_status_starts_index' => [
+                    'tenant_id',
+                    'status',
+                    'starts_at',
+                ],
+            ],
+            'customers' => [
+                'customers_tenant_name_id_index' => ['tenant_id', 'name', 'id'],
+            ],
+            'plans' => [
+                'plans_status_price_id_index' => ['status', 'price', 'id'],
+            ],
+        ];
+
+        foreach ($expectedIndexes as $table => $indexes) {
+            $actualIndexes = collect(Schema::getIndexes($table))->keyBy('name');
+
+            foreach ($indexes as $name => $columns) {
+                $this->assertSame(
+                    $columns,
+                    $actualIndexes->get($name)['columns'] ?? null,
+                    "Index [{$name}] does not match the expected query shape.",
+                );
+            }
+        }
+
+        $planIndexes = collect(Schema::getIndexes('plans'))->pluck('name');
+        $this->assertNotContains('plans_status_index', $planIndexes);
+    }
+
     public function test_users_can_belong_to_multiple_tenants_with_membership_status(): void
     {
         $user = User::factory()->create();

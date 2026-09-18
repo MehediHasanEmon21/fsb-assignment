@@ -31,7 +31,7 @@ class UpdateTenantRequest extends FormRequest
                 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
                 Rule::unique(Tenant::class, 'slug')->ignore($this->route('tenant')),
             ],
-            'email' => ['sometimes', 'nullable', 'string', 'email:rfc', 'max:255'],
+            'email' => ['sometimes', 'required', 'string', 'email:rfc', 'max:255'],
             'status' => ['sometimes', 'required', Rule::in(['active', 'inactive'])],
         ];
     }
@@ -63,9 +63,7 @@ class UpdateTenantRequest extends FormRequest
         }
 
         if ($this->has('email')) {
-            $values['email'] = $this->filled('email')
-                ? Str::lower($this->string('email')->trim()->toString())
-                : null;
+            $values['email'] = Str::lower($this->string('email')->trim()->toString());
         }
 
         $this->merge($values);
