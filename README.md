@@ -1,74 +1,398 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# SaaS Subscription & Tenant Management API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+This is a Laravel backend for a SaaS-style subscription and tenant
+management system. It is built as a REST API, with tenant isolation,
+subscription plans, feature limits, role-based access, Redis caching,
+queue-backed email work, and automated tests around the important business
+rules.
 
-## Database Architecture
+The code is intentionally direct. Controllers handle HTTP concerns,
+services handle business operations, policies and permissions handle access,
+and tenant-owned data is always resolved through the selected tenant context.
 
-The application uses a single MySQL database and shared schema. Users are global identities and access tenants through the `tenant_user` membership table, allowing one user to belong to multiple tenants without placing `tenant_id` on `users`.
+## What It Does
 
-Core relationships:
+- Authenticates API users with Laravel Sanctum bearer tokens.
+- Supports multiple tenants in one shared database.
+- Lets a platform super admin create tenants.
+- Automatically creates the first tenant admin when a tenant is created.
+- Manages tenant users, roles, and membership status.
+- Lists subscription plans and assigns/cancels tenant subscriptions.
+- Enforces feature limits for users and customers.
+- Manages tenant customers with filtering, sorting, and pagination.
+- Provides a tenant dashboard with counts, subscription data, and feature usage.
+- Uses Redis for cache and queue work.
+- Sends tenant admin welcome email work through a queued job.
 
-- `users` many-to-many `tenants` through `tenant_user`
-- `tenants` one-to-many `customers`, `subscriptions`, and `feature_usages`
-- `plans` many-to-many `features` through `plan_features`
-- `subscriptions` belong to one tenant and one plan
-- `feature_usages` belong to one tenant and one feature for a unique usage period
+Public registration is not open. A user is created by an authenticated tenant
+user with the right permission.
 
-Tenant-owned rows cascade when their tenant is deleted. Membership and plan-feature mapping rows also cascade with their parents. Plans and features referenced by historical subscription or usage data are restricted from deletion.
+## Technology Stack
 
-Database constraints enforce unique tenant memberships, plan-feature mappings, tenant/feature usage periods, tenant slugs, plan slugs, feature keys, and global user email addresses. A non-null customer email is unique within its tenant but may be reused in another tenant. Initial composite indexes support membership lookup, active subscription lookup, and tenant-scoped customer filtering.
+- Laravel 13
+- PHP 8.4 FPM
+- Laravel Sanctum
+- Spatie Laravel Permission
+- MySQL 8.4
+- Redis 8
+- Docker / Docker Compose
+- Nginx
+- PHPUnit
+- Laravel Pint
+- Laravel Boost for framework-aware development guidance
 
-## About Laravel
+## Local Setup
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
-
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+From a clean clone:
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+git clone <repository-url>
+cd fsb-task
+cp .env.example .env
+docker compose build
+docker compose up -d
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Install PHP dependencies inside the application container:
 
-## Contributing
+```bash
+docker compose exec app composer install
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Generate the application key:
 
-## Code of Conduct
+```bash
+docker compose exec app php artisan key:generate
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Run migrations and seeders:
 
-## Security Vulnerabilities
+```bash
+docker compose exec app php artisan migrate --seed
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+The API is available at:
 
-## License
+```text
+http://localhost:8000/api/v1
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+The MySQL container is exposed on the host at port `3307`. Inside Docker,
+Laravel connects to MySQL through the `mysql` service on port `3306`.
+
+## Useful Commands
+
+Run the full test suite:
+
+```bash
+docker compose exec app php artisan test
+```
+
+Check code style:
+
+```bash
+docker compose exec app ./vendor/bin/pint --test
+```
+
+Clear Laravel caches:
+
+```bash
+docker compose exec app php artisan optimize:clear
+```
+
+Run seeders again:
+
+```bash
+docker compose exec app php artisan db:seed
+```
+
+Fresh database with seed data:
+
+```bash
+docker compose exec app php artisan migrate:fresh --seed
+```
+
+## Seeded Reviewer Data
+
+The seeders create local demo data so the API can be exercised immediately
+after `migrate:fresh --seed`. These accounts are only for the local assessment
+environment and all use the password `password`.
+
+| Email | Role | Tenant | Tenant slug | What to test |
+| --- | --- | --- | --- | --- |
+| `superadmin@example.test` | `super admin` | Platform | n/a | List and create tenants |
+| `admin@acme.test` | `tenant admin` | Acme Software Ltd | `acme-software` | Full tenant administration |
+| `manager@acme.test` | `manager` | Acme Software Ltd | `acme-software` | Customer/user management without platform access |
+| `user@acme.test` | `user` | Acme Software Ltd | `acme-software` | Read-only tenant operations |
+| `admin@northwind.test` | `tenant admin` | Northwind Labs | `northwind-labs` | Separate tenant context |
+| `manager@northwind.test` | `manager` | Northwind Labs | `northwind-labs` | Second tenant permission checks |
+| `user@northwind.test` | `user` | Northwind Labs | `northwind-labs` | Second tenant read-only checks |
+
+There is also an inactive tenant, `suspended-demo`, for access-denial checks.
+
+Suggested reviewer flow:
+
+1. Log in as `superadmin@example.test` and list tenants.
+2. Log in as `admin@acme.test`.
+3. Call Acme customer, subscription, and dashboard endpoints with Acme's
+   tenant id in `X-Tenant-ID`.
+4. Retry a Northwind tenant route with the Acme token to confirm tenant
+   isolation.
+5. Log in as `admin@northwind.test` and confirm Northwind data is separate.
+
+Inspect API routes:
+
+```bash
+docker compose exec app php artisan route:list --path=api/v1
+```
+
+The queue worker is already defined as the `queue` service in Docker Compose.
+For a foreground worker during debugging:
+
+```bash
+docker compose exec app php artisan queue:work redis --queue=notifications,default
+```
+
+## API Documentation
+
+API documentation lives in:
+
+- `docs/API_DOCUMENTATION.md`
+- `docs/openapi.yaml`
+
+Open `docs/openapi.yaml` in Swagger Editor, Swagger UI, Redoc, Stoplight, or
+Postman. The spec documents the base URL, authentication, tenant header,
+endpoints, request bodies, filters, sorting, pagination, status codes, and
+error responses.
+
+Quick auth flow:
+
+```http
+POST /api/v1/auth/login
+```
+
+Then send protected requests with:
+
+```http
+Authorization: Bearer {token}
+Accept: application/json
+```
+
+Tenant-scoped routes also require:
+
+```http
+X-Tenant-ID: {tenant_id}
+```
+
+## Architecture
+
+The application uses a versioned REST API under `/api/v1`.
+
+The main shape is:
+
+- Routes define the HTTP surface and middleware stack.
+- Form Requests validate input and allow-list query parameters.
+- Controllers stay thin and return the shared API response envelope.
+- Services perform business operations and transactions.
+- Policies and Spatie permissions enforce capabilities.
+- Tenant context ensures tenant-owned queries stay inside one tenant.
+- API Resources expose only the fields meant for clients.
+
+More detail is documented in `docs/ARCHITECTURE.md`.
+
+## Multi-Tenancy
+
+The project uses a single database and shared schema. Users are global
+identities and can belong to many tenants through the `tenant_user` table.
+
+Tenant-scoped endpoints require a valid `X-Tenant-ID` header. The selected
+tenant is resolved against the authenticated user's accessible tenants, except
+for super admin platform operations where the super admin can manage tenants
+without membership.
+
+Important rule: permission alone is never enough for tenant-owned data. The
+request must also resolve to the correct tenant context.
+
+## Authorization
+
+Authentication, membership, and authorization are separate checks:
+
+- Sanctum proves who the user is.
+- Tenant resolution proves which tenant the request is operating in.
+- Spatie permissions and policies decide what the user may do.
+
+Roles are lowercase and use the `sanctum` guard:
+
+- `super admin`
+- `tenant admin`
+- `manager`
+- `user`
+
+`super admin` can manage the platform, but tenant-scoped routes still need a
+valid tenant context where the route requires one.
+
+## Subscriptions and Feature Limits
+
+Plans define feature values through `plan_features`.
+
+Current seeded features:
+
+- `users`: numeric limit
+- `customers`: numeric limit
+- `analytics`: boolean feature
+
+Subscriptions belong to tenants. The entitlement service reads the tenant's
+current active subscription and decides whether a feature is available. For
+numeric limits, usage is tracked in `feature_usages` for the subscription
+period.
+
+Customer creation and user activation are quota-protected. Over-limit writes
+fail without partially creating the next record.
+
+## Database Design
+
+Important tables:
+
+- `users`: global user identity, email is globally unique.
+- `tenants`: tenant/company records.
+- `tenant_user`: tenant membership and membership status.
+- `plans`: public subscription plans.
+- `features`: available plan features.
+- `plan_features`: feature values per plan.
+- `subscriptions`: tenant subscription history.
+- `feature_usages`: tenant feature usage per billing period.
+- `customers`: tenant-owned customer records.
+- Spatie permission tables: roles, permissions, and model assignments.
+- Sanctum personal access token table.
+- Laravel queue, cache, and failed job tables.
+
+Key constraints:
+
+- Tenant slugs are unique.
+- User emails are unique globally.
+- A user can only have one membership row per tenant.
+- A plan can only define a feature once.
+- Customer emails are unique within a tenant when present.
+- Feature usage is unique per tenant, feature, and usage period.
+
+## Caching Strategy
+
+Redis is used as the application cache store.
+
+Cached tenant data:
+
+- Dashboard response data.
+- Entitlement snapshots.
+
+Cache keys include the tenant id:
+
+```text
+tenant:{tenant_id}:dashboard:v1
+tenant:{tenant_id}:features:v1
+```
+
+Default TTLs:
+
+- Dashboard: `TENANT_DASHBOARD_CACHE_TTL=60`
+- Entitlements: `TENANT_ENTITLEMENTS_CACHE_TTL=300`
+
+The app does not rely on TTL alone. Customer changes, subscription changes,
+feature usage changes, and membership changes invalidate the relevant tenant
+cache entries.
+
+## Database Optimization
+
+The code avoids loading large collections when aggregate counts are enough.
+Dashboard metrics use aggregate queries, list endpoints paginate by default,
+and API list inputs only accept allow-listed filters and sort fields.
+
+Indexes are tied to real query shapes:
+
+- `tenant_user(tenant_id, status)` for member counts and active membership.
+- `tenant_user(user_id, status)` for accessible tenant lookup.
+- `subscriptions(tenant_id, status, ends_at)` and
+  `subscriptions(tenant_id, status, starts_at)` for current subscription checks.
+- `customers(tenant_id, status, created_at)` for filtered customer lists.
+- `customers(tenant_id, name, id)` for tenant customer ordering.
+- `plans(status, price, id)` for active plan listing by price.
+
+## Security Notes
+
+- `.env` is ignored and should never be committed.
+- `APP_DEBUG=false` is the safe default in `.env.example`.
+- API errors use a consistent envelope and avoid stack traces.
+- Server exceptions are logged internally.
+- Login is rate limited by email and IP.
+- General API routes are rate limited by token hash when authenticated.
+- Protected routes require Sanctum tokens with the `api` ability.
+- Inactive users cannot keep using existing tokens.
+- Form Requests validate writes and query parameters.
+- API Resources avoid exposing passwords, tokens, and internal fields.
+- Cross-tenant resource access returns forbidden or not found without exposing
+  tenant-owned data.
+
+## Queues
+
+Tenant creation dispatches a welcome email job for the initial tenant admin.
+The job:
+
+- Runs after the database transaction commits.
+- Is unique per tenant admin for one hour.
+- Re-establishes tenant context while running.
+- Sends through Laravel Mail, configured as `log` by default.
+- Retries up to three times with backoff.
+- Logs tenant-safe failure context.
+
+Docker Compose includes a `queue` service that runs:
+
+```bash
+php artisan queue:work redis --queue=notifications,default
+```
+
+## Technical Decisions
+
+Single database, shared schema:
+
+This keeps the assessment understandable and easy to run while still requiring
+real tenant isolation in queries, policies, validation, cache keys, and jobs.
+
+Separate customers from users:
+
+Customers are business records owned by a tenant. Users are login identities.
+If a customer later needs login access, the user identity can be created and
+linked deliberately instead of mixing customer CRM data with authentication.
+
+No public registration:
+
+The API is for managed SaaS administration. Tenant users are created by
+authenticated users with the correct tenant permission.
+
+Services instead of heavy repositories:
+
+Services own business workflows and transactions. Repositories are not added
+around simple Eloquent queries because that would add ceremony without making
+the code easier to change.
+
+Explicit cache invalidation:
+
+Tenant cache entries include tenant ids and are invalidated on writes. TTL is
+only a fallback, not the correctness mechanism.
+
+## Final Reviewer Checklist
+
+```bash
+cp .env.example .env
+docker compose build
+docker compose up -d
+docker compose exec app composer install
+docker compose exec app php artisan key:generate
+docker compose exec app php artisan migrate:fresh --seed
+docker compose exec app php artisan test
+docker compose exec app ./vendor/bin/pint --test
+```
+
+Then inspect:
+
+- `docs/API_DOCUMENTATION.md`
+- `docs/openapi.yaml`
+- `docs/ARCHITECTURE.md`
