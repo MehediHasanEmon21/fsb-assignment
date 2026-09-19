@@ -93,7 +93,6 @@ class ReviewerDemoSeederTest extends TestCase
         return $this->postJson('/api/v1/auth/login', [
             'email' => $email,
             'password' => 'password',
-            'device_name' => 'reviewer-demo-test',
         ])
             ->assertOk()
             ->json('data.token');

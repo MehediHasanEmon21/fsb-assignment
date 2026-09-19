@@ -9,7 +9,7 @@ info:
     Public registration is disabled. Users are created by authenticated tenant
     administrators through `POST /api/v1/auth/register`.
 servers:
-  - url: http://localhost/api/v1
+  - url: http://localhost:8000/api/v1
     description: Local Docker API base URL
 tags:
   - name: Authentication
@@ -37,9 +37,8 @@ paths:
             examples:
               default:
                 value:
-                  email: admin@example.com
+                  email: admin@acme.test
                   password: password
-                  device_name: workstation
       responses:
         "200":
           description: Login successful.
@@ -119,8 +118,8 @@ paths:
             examples:
               default:
                 value:
-                  name: Jane Doe
-                  email: jane@example.com
+                  name: Acme Reviewer User
+                  email: reviewer.user@acme.test
                   password: SecurePass1!
                   password_confirmation: SecurePass1!
       responses:
@@ -243,6 +242,12 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/StoreTenantRequest"
+            examples:
+              default:
+                value:
+                  name: Globex Demo Ltd
+                  slug: globex-demo
+                  email: admin@globex.test
       responses:
         "201":
           description: Tenant created successfully.
@@ -300,6 +305,13 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/UpdateTenantRequest"
+            examples:
+              acme:
+                value:
+                  name: Acme Software Ltd
+                  slug: acme-software
+                  email: admin@acme.test
+                  status: active
       responses:
         "200":
           description: Tenant updated successfully.
@@ -372,6 +384,10 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/UpdateTenantMemberRequest"
+            examples:
+              deactivateSeededMember:
+                value:
+                  status: inactive
       responses:
         "200":
           description: Tenant member updated successfully.
@@ -433,6 +449,10 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/UpdateTenantMemberRoleRequest"
+            examples:
+              promoteSeededUser:
+                value:
+                  role: manager
       responses:
         "200":
           description: Tenant member role updated successfully.
@@ -504,6 +524,13 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/StoreCustomerRequest"
+            examples:
+              acme:
+                value:
+                  name: Jordan Lee
+                  email: jordan@acme.test
+                  phone: "+1-555-0199"
+                  status: active
       responses:
         "201":
           description: Customer created successfully.
@@ -565,6 +592,13 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/UpdateCustomerRequest"
+            examples:
+              acmeSeededCustomer:
+                value:
+                  name: Avery Stone
+                  email: avery@acme.test
+                  phone: "+1-555-0101"
+                  status: active
       responses:
         "200":
           description: Customer updated successfully.
@@ -675,6 +709,10 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/UpsertSubscriptionRequest"
+            examples:
+              changeAcmeToStarter:
+                value:
+                  plan_id: 1
       responses:
         "200":
           description: Subscription updated successfully.
@@ -739,6 +777,7 @@ components:
       schema:
         type: integer
         minimum: 1
+      example: 1
       description: Required for tenant-scoped routes. Must identify a tenant the user can access.
     Search:
       name: search
@@ -758,6 +797,7 @@ components:
       schema:
         type: integer
         minimum: 1
+      example: 1
     PerPage:
       name: per_page
       in: query
@@ -765,6 +805,7 @@ components:
         type: integer
         minimum: 1
         maximum: 100
+      example: 15
       description: Defaults to 15 when omitted.
     PlanId:
       name: plan
@@ -773,6 +814,7 @@ components:
       schema:
         type: integer
         minimum: 1
+      example: 1
     TenantId:
       name: tenant
       in: path
@@ -780,6 +822,7 @@ components:
       schema:
         type: integer
         minimum: 1
+      example: 1
     MemberId:
       name: member
       in: path
@@ -787,6 +830,7 @@ components:
       schema:
         type: integer
         minimum: 1
+      example: 3
     CustomerId:
       name: customer
       in: path
@@ -794,6 +838,7 @@ components:
       schema:
         type: integer
         minimum: 1
+      example: 1
   responses:
     BadRequest:
       description: Bad request, commonly missing or invalid tenant header.
@@ -918,10 +963,6 @@ components:
           format: email
         password:
           type: string
-          maxLength: 255
-        device_name:
-          type: string
-          nullable: true
           maxLength: 255
     RegisterRequest:
       type: object

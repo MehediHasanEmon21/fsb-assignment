@@ -26,20 +26,13 @@ class LoginRequest extends FormRequest
         return [
             'email' => ['required', 'string', 'email:rfc'],
             'password' => ['required', 'string', 'max:255'],
-            'device_name' => ['sometimes', 'nullable', 'string', 'max:255'],
         ];
     }
 
     protected function prepareForValidation(): void
     {
-        $normalized = [
+        $this->merge([
             'email' => Str::lower($this->string('email')->trim()->toString()),
-        ];
-
-        if ($this->has('device_name')) {
-            $normalized['device_name'] = $this->string('device_name')->trim()->toString();
-        }
-
-        $this->merge($normalized);
+        ]);
     }
 }

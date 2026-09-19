@@ -21,7 +21,6 @@ class AuthenticatedSessionController extends Controller
             $session = $this->authentication->login(
                 $request->string('email')->toString(),
                 $request->string('password')->toString(),
-                $request->string('device_name')->toString(),
             );
 
             return $this->successResponse([

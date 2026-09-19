@@ -16,7 +16,7 @@ class AuthenticationService
      *
      * @throws InvalidCredentialsException
      */
-    public function login(string $email, string $password, string $deviceName): array
+    public function login(string $email, string $password): array
     {
         $user = User::query()->where('email', $email)->first();
 
@@ -28,13 +28,12 @@ class AuthenticationService
             throw new InvalidCredentialsException;
         }
 
-        $tokenName = trim($deviceName) !== '' ? $deviceName : self::DEFAULT_TOKEN_NAME;
         $expiration = (int) config('sanctum.expiration');
         $expiresAt = $expiration > 0 ? now()->addMinutes($expiration) : null;
 
         return [
             'user' => $user,
-            'token' => $user->createToken($tokenName, ['api'], $expiresAt)->plainTextToken,
+            'token' => $user->createToken(self::DEFAULT_TOKEN_NAME, ['api'], $expiresAt)->plainTextToken,
         ];
     }
 

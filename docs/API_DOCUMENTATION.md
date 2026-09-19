@@ -12,7 +12,7 @@ It can be opened in Swagger UI, Redoc, Stoplight, Postman, or any OpenAPI
 Local Docker:
 
 ```text
-http://localhost/api/v1
+http://localhost:8000/api/v1
 ```
 
 API version:
@@ -65,6 +65,13 @@ Reviewer flow:
    `/tenants/{tenant}/dashboard`.
 5. Reuse the Acme token against a Northwind tenant id to verify cross-tenant
    access is rejected.
+
+After a fresh seeded database, `acme-software` is normally tenant id `1`,
+`northwind-labs` is normally tenant id `2`, the seeded plans are `starter`
+and `professional`, and Acme includes seeded customers such as
+`avery@acme.test`. The OpenAPI examples use these seeded reviewer values where
+an existing value is valid. Create requests use new demo emails because seeded
+emails must remain unique.
 
 ## Response Shape
 

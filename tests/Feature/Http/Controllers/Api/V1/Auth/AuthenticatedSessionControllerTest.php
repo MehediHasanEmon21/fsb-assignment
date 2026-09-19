@@ -21,7 +21,6 @@ class AuthenticatedSessionControllerTest extends TestCase
         $response = $this->postJson('/api/v1/auth/login', [
             'email' => '  JANE@EXAMPLE.COM ',
             'password' => 'password',
-            'device_name' => '  integration-test  ',
         ]);
 
         $response->assertOk()
@@ -32,29 +31,11 @@ class AuthenticatedSessionControllerTest extends TestCase
             ->assertJsonStructure(['data' => ['token']])
             ->assertJsonMissing(['password', 'remember_token']);
 
-        $this->assertSame('integration-test', $user->tokens()->value('name'));
+        $this->assertSame('api-token', $user->tokens()->value('name'));
         $this->assertSame(['api'], $user->tokens()->firstOrFail()->abilities);
         $this->assertNotNull($user->tokens()->firstOrFail()->expires_at);
         $this->assertStringContainsString('|saas_', $response->json('data.token'));
         $this->assertDatabaseCount('personal_access_tokens', 1);
-    }
-
-    public function test_login_without_a_device_name_uses_the_default_token_name(): void
-    {
-        $user = User::factory()->create([
-            'email' => 'jane@example.com',
-            'password' => 'password',
-        ]);
-
-        $response = $this->postJson('/api/v1/auth/login', [
-            'email' => 'jane@example.com',
-            'password' => 'password',
-        ]);
-
-        $response->assertOk()
-            ->assertJsonPath('success', true)
-            ->assertJsonStructure(['data' => ['token']]);
-        $this->assertSame('api-token', $user->tokens()->value('name'));
     }
 
     public function test_invalid_credentials_return_401_without_creating_a_token(): void
@@ -67,7 +48,6 @@ class AuthenticatedSessionControllerTest extends TestCase
         $response = $this->postJson('/api/v1/auth/login', [
             'email' => 'jane@example.com',
             'password' => 'wrong-password',
-            'device_name' => 'integration-test',
         ]);
 
         $response->assertUnauthorized()
@@ -88,7 +68,6 @@ class AuthenticatedSessionControllerTest extends TestCase
         $response = $this->postJson('/api/v1/auth/login', [
             'email' => 'jane@example.com',
             'password' => 'password',
-            'device_name' => 'integration-test',
         ]);
 
         $response->assertUnauthorized()
@@ -104,7 +83,6 @@ class AuthenticatedSessionControllerTest extends TestCase
         $credentials = [
             'email' => 'missing@example.com',
             'password' => 'wrong-password',
-            'device_name' => 'integration-test',
         ];
 
         for ($attempt = 1; $attempt <= 5; $attempt++) {
