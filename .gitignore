@@ -1,6 +1,5 @@
 *.log
 .DS_Store
-AGENTS.md
 assesment/
 .env
 .env.backup
