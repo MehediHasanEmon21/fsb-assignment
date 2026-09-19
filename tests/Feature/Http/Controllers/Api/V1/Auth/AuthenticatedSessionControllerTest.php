@@ -28,6 +28,10 @@ class AuthenticatedSessionControllerTest extends TestCase
             ->assertJsonPath('message', 'Login successful.')
             ->assertJsonPath('data.user.id', $user->id)
             ->assertJsonPath('data.user.email', 'jane@example.com')
+            ->assertJsonPath('data.user.is_super_admin', false)
+            ->assertJsonPath('data.user.tenant_id', null)
+            ->assertJsonPath('data.user.role', null)
+            ->assertJsonCount(0, 'data.user.tenants')
             ->assertJsonStructure(['data' => ['token']])
             ->assertJsonMissing(['password', 'remember_token']);
 

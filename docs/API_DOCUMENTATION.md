@@ -59,12 +59,41 @@ accounts are available. They all use the password `password`.
 Reviewer flow:
 
 1. Log in with `POST /auth/login`.
-2. Use `GET /tenants` to find the tenant id for `acme-software`.
-3. Send that id as both the route tenant id and `X-Tenant-ID`.
-4. Call `/tenants/{tenant}/customers`, `/tenants/{tenant}/subscription`, and
+2. Read `data.user.tenant_id` when the account has exactly one accessible
+   tenant, or select an entry from `data.user.tenants` when it has several.
+   `GET /auth/me` returns the same access summary.
+3. A Super Admin receives `tenant_id: null`, `role: "super admin"`, and selects
+   a target using `GET /tenants` because platform access is not tenant
+   membership.
+4. Use `GET /tenants` when a fresh tenant list is needed or to find a tenant by
+   slug such as `acme-software`.
+5. Send the selected id as both the route tenant id and `X-Tenant-ID`.
+6. Call `/tenants/{tenant}/customers`, `/tenants/{tenant}/subscription`, and
    `/tenants/{tenant}/dashboard`.
-5. Reuse the Acme token against a Northwind tenant id to verify cross-tenant
+7. Reuse the Acme token against a Northwind tenant id to verify cross-tenant
    access is rejected.
+
+Authenticated user access fields:
+
+```json
+{
+  "tenant_id": 1,
+  "role": "tenant admin",
+  "is_super_admin": false,
+  "tenants": [
+    {
+      "id": 1,
+      "name": "Acme Software Ltd",
+      "slug": "acme-software",
+      "role": "tenant admin"
+    }
+  ]
+}
+```
+
+`tenant_id` is a convenience value only when exactly one active tenant is
+accessible. For a multi-tenant user it is `null`; the client must choose from
+`tenants` and use the role belonging to that selected entry.
 
 After a fresh seeded database, `acme-software` is normally tenant id `1`,
 `northwind-labs` is normally tenant id `2`, the seeded plans are `starter`
@@ -128,6 +157,21 @@ Paginated lists return:
 
 List endpoints support allow-listed query parameters only. Invalid sort
 fields, directions, filters, or pagination sizes return `422`.
+
+All query parameters are optional. The default plan-list request is:
+
+```http
+GET http://localhost:8000/api/v1/plans
+```
+
+In Postman, leave the optional parameters unchecked in the **Params** tab and
+enable only the values being tested. In Swagger, leave optional parameter
+fields empty. A filter is appended to the URL only when it is enabled and has a
+value. For example:
+
+```http
+GET http://localhost:8000/api/v1/plans?billing_interval=yearly&sort=price&direction=desc
+```
 
 Common pagination:
 

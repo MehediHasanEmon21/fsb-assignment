@@ -7,13 +7,17 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Auth\LoginRequest;
 use App\Http\Resources\Api\V1\UserResource;
 use App\Services\AuthenticationService;
+use App\Services\UserAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Throwable;
 
 class AuthenticatedSessionController extends Controller
 {
-    public function __construct(private readonly AuthenticationService $authentication) {}
+    public function __construct(
+        private readonly AuthenticationService $authentication,
+        private readonly UserAccessService $access,
+    ) {}
 
     public function store(LoginRequest $request): JsonResponse
     {
@@ -24,7 +28,10 @@ class AuthenticatedSessionController extends Controller
             );
 
             return $this->successResponse([
-                'user' => UserResource::make($session['user'])->resolve($request),
+                'user' => [
+                    ...UserResource::make($session['user'])->resolve($request),
+                    ...$this->access->summary($session['user']),
+                ],
                 'token' => $session['token'],
             ], 'Login successful.');
         } catch (InvalidCredentialsException $exception) {

@@ -54,7 +54,7 @@ paths:
                         required: [user, token]
                         properties:
                           user:
-                            $ref: "#/components/schemas/User"
+                            $ref: "#/components/schemas/AuthenticatedUser"
                           token:
                             type: string
                             example: "1|saas_example_token"
@@ -94,7 +94,7 @@ paths:
                   - type: object
                     properties:
                       data:
-                        $ref: "#/components/schemas/User"
+                        $ref: "#/components/schemas/AuthenticatedUser"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -146,15 +146,23 @@ paths:
     get:
       tags: [Plans]
       summary: List active plans
+      description: |
+        All query parameters are optional. With no selected filters, the
+        request URL is `/plans`. Add a query parameter only when its filter,
+        sort, or pagination control is intentionally enabled.
       parameters:
         - $ref: "#/components/parameters/Search"
         - name: billing_interval
           in: query
+          required: false
+          description: Optional. Omit to include every supported billing interval.
           schema:
             type: string
             enum: [monthly, yearly]
         - name: sort
           in: query
+          required: false
+          description: Optional. Omit to use the server default of `price`.
           schema:
             type: string
             enum: [name, price, created_at]
@@ -311,7 +319,6 @@ paths:
                   name: Acme Software Ltd
                   slug: acme-software
                   email: admin@acme.test
-                  status: active
       responses:
         "200":
           description: Tenant updated successfully.
@@ -438,7 +445,10 @@ paths:
     patch:
       tags: [Tenant Members]
       summary: Change a tenant member role
-      description: Tenant admins may assign `manager` or `user`; platform admins can manage admin roles.
+      description: |
+        Tenant admins may assign `manager` or `user`. Super admins may also
+        assign `tenant admin`. The `super admin` role cannot be assigned through
+        this tenant endpoint.
       parameters:
         - $ref: "#/components/parameters/TenantId"
         - $ref: "#/components/parameters/MemberId"
@@ -782,31 +792,36 @@ components:
     Search:
       name: search
       in: query
+      required: false
+      description: Optional. Omit when no text search is needed.
       schema:
         type: string
         maxLength: 100
     Direction:
       name: direction
       in: query
+      required: false
+      description: Optional. Omit to use the endpoint's default direction.
       schema:
         type: string
         enum: [asc, desc]
     Page:
       name: page
       in: query
+      required: false
+      description: Optional. Omit to use the first page.
       schema:
         type: integer
         minimum: 1
-      example: 1
     PerPage:
       name: per_page
       in: query
+      required: false
       schema:
         type: integer
         minimum: 1
         maximum: 100
-      example: 15
-      description: Defaults to 15 when omitted.
+      description: Optional. Omit to use the server default of 15 items.
     PlanId:
       name: plan
       in: path
@@ -1030,7 +1045,7 @@ components:
       properties:
         role:
           type: string
-          enum: [superadmin, tenant_admin, manager, user]
+          enum: [super admin, tenant admin, manager, user]
     StoreCustomerRequest:
       type: object
       required: [name]
@@ -1099,6 +1114,46 @@ components:
         created_at:
           type: string
           format: date-time
+    AuthenticatedTenantAccess:
+      type: object
+      required: [id, name, slug, role]
+      properties:
+        id:
+          type: integer
+          description: Use this value as `X-Tenant-ID` and the tenant path parameter.
+        name:
+          type: string
+        slug:
+          type: string
+        role:
+          type: [string, "null"]
+          enum: [super admin, tenant admin, manager, user, null]
+    AuthenticatedUser:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          required: [is_super_admin, tenant_id, role, tenants]
+          properties:
+            is_super_admin:
+              type: boolean
+            tenant_id:
+              type: [integer, "null"]
+              description: |
+                Convenience tenant selection when exactly one active tenant is
+                accessible. Null for multi-tenant users, users without an active
+                membership, and super admins.
+            role:
+              type: [string, "null"]
+              enum: [super admin, tenant admin, manager, user, null]
+              description: |
+                Role for the singular `tenant_id`, or `super admin` for a
+                platform administrator. Null when the client must select among
+                multiple tenant memberships.
+            tenants:
+              type: array
+              description: Active tenant memberships and the role in each tenant.
+              items:
+                $ref: "#/components/schemas/AuthenticatedTenantAccess"
     Tenant:
       type: object
       required: [id, name, slug, email, status, created_at, updated_at]
@@ -1133,7 +1188,7 @@ components:
               type: array
               items:
                 type: string
-                enum: [superadmin, tenant_admin, manager, user]
+                enum: [super admin, tenant admin, manager, user]
     Customer:
       type: object
       required: [id, name, email, phone, status, created_at, updated_at]
