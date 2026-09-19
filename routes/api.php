@@ -109,3 +109,8 @@ Route::prefix('v1/tenants')
                 ->name('subscription.destroy');
         });
     });
+
+Route::fallback(fn () => response()->json([
+    'success' => false,
+    'message' => 'Requested resource not found.',
+], 404));

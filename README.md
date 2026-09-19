@@ -41,13 +41,13 @@ user with the right permission.
 - Laravel Pint
 - Laravel Boost for framework-aware development guidance
 
-## Local Setup
+## Setup Instruction
 
 From a clean clone:
 
 ```bash
-git clone <repository-url>
-cd fsb-task
+git clone https://github.com/MehediHasanEmon21/fsb-assignment.git
+cd fsb-assignment
 cp .env.example .env
 docker compose build
 docker compose up -d
@@ -76,6 +76,14 @@ The API is available at:
 ```text
 http://localhost:8000/api/v1
 ```
+
+Opening `http://localhost:8000` returns a small JSON service-information
+response. This is an API-only project, so the default Laravel welcome page is
+not exposed. Laravel's health check remains available at
+`http://localhost:8000/up`.
+
+Unknown web or API routes return a JSON `404` response with the message
+`Requested resource not found.`
 
 The MySQL container is exposed on the host at port `3307`. Inside Docker,
 Laravel connects to MySQL through the `mysql` service on port `3306`.
@@ -157,13 +165,13 @@ docker compose exec app php artisan queue:work redis --queue=notifications,defau
 
 API documentation lives in:
 
-- `docs/API_DOCUMENTATION.md`
-- `docs/openapi.yaml`
+- [API documentation](docs/API_DOCUMENTATION.md)
+- [OpenAPI specification](docs/openapi.yaml)
 
-Open `docs/openapi.yaml` in Swagger Editor, Swagger UI, Redoc, Stoplight, or
-Postman. The spec documents the base URL, authentication, tenant header,
-endpoints, request bodies, filters, sorting, pagination, status codes, and
-error responses.
+Open the [OpenAPI specification](docs/openapi.yaml) in Swagger Editor, Swagger
+UI, Redoc, Stoplight, or Postman. The spec documents the base URL,
+authentication, tenant header, endpoints, request bodies, filters, sorting,
+pagination, status codes, and error responses.
 
 Quick auth flow:
 
@@ -198,7 +206,7 @@ The main shape is:
 - Tenant context ensures tenant-owned queries stay inside one tenant.
 - API Resources expose only the fields meant for clients.
 
-More detail is documented in `docs/ARCHITECTURE.md`.
+More detail is documented in the [architecture notes](docs/ARCHITECTURE.md).
 
 ## Multi-Tenancy
 
@@ -393,6 +401,6 @@ docker compose exec app ./vendor/bin/pint --test
 
 Then inspect:
 
-- `docs/API_DOCUMENTATION.md`
-- `docs/openapi.yaml`
-- `docs/ARCHITECTURE.md`
+- [API documentation](docs/API_DOCUMENTATION.md)
+- [OpenAPI specification](docs/openapi.yaml)
+- [Architecture notes](docs/ARCHITECTURE.md)

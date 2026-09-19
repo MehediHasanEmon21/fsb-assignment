@@ -123,6 +123,15 @@ Error:
 }
 ```
 
+An unmatched API URL or HTTP route returns `404` using the same envelope:
+
+```json
+{
+  "success": false,
+  "message": "Requested resource not found."
+}
+```
+
 Validation error:
 
 ```json

@@ -60,6 +60,16 @@ class ComprehensiveApiBehaviorTest extends TestCase
             ]);
     }
 
+    public function test_unmatched_api_route_uses_the_standard_not_found_error_envelope(): void
+    {
+        $this->getJson('/api/v1/route-that-does-not-exist')
+            ->assertNotFound()
+            ->assertExactJson([
+                'success' => false,
+                'message' => 'Requested resource not found.',
+            ]);
+    }
+
     public function test_revoked_token_cannot_access_any_protected_route(): void
     {
         $user = User::factory()->create();

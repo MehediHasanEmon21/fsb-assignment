@@ -883,14 +883,16 @@ components:
             success: false
             message: This action is unauthorized.
     NotFound:
-      description: Resource not found or not visible within the current tenant boundary.
+      description: |
+        Requested resource was not found, the API route did not match, or the
+        resource is not visible within the current tenant boundary.
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorEnvelope"
           example:
             success: false
-            message: Resource not found.
+            message: Requested resource not found.
     ValidationError:
       description: Validation failed.
       content:
